@@ -28,13 +28,13 @@ router.post('/register', upload.single('customerImage'), customerController.crea
 router.post('/login', customerController.loginCustomer);
 
 
-router.get('/get-all-customers', auth, customerController.getAllCustomers);
+router.get('/get-all-customers', auth("customer"), customerController.getAllCustomers);
 
 
-router.get('/profile', auth, customerController.getCustomerProfile);
+router.get('/profile', auth("customer"), customerController.getCustomerProfile);
 
 
-router.patch('/update', auth, upload.single('customerImage'), customerController.updateCustomer);
+router.patch('/update', auth("customer"), upload.single('customerImage'), customerController.updateCustomer);
 
 
 // router.delete('/delete', auth, customerController.deleteCustomer);
