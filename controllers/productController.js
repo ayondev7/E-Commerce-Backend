@@ -77,9 +77,7 @@ exports.createProduct = [
       }
 
       if (!req.seller || !req.seller._id) {
-        return res
-          .status(403)
-          .json({ error: "Unauthorized: Seller not found" });
+        return res.status(403).json({ error: "Unauthorized!" });
       }
 
       let productImages = [];
@@ -164,7 +162,7 @@ exports.createProduct = [
 
 exports.getAllProducts = async (req, res) => {
   if (!req.seller || !req.seller._id) {
-    return res.status(403).json({ error: "Unauthorized: Seller not found" });
+    return res.status(403).json({ error: "Unauthorized!" });
   }
   const sellerId = req.seller._id;
   try {
@@ -187,13 +185,59 @@ exports.getAllProducts = async (req, res) => {
         status,
         image: product.productImages?.[0]?.length
           ? product.productImages[0].toString("base64")
-          : null
+          : null,
       };
     });
 
     res.status(200).json({ products: formattedProducts });
   } catch (error) {
     console.error("Get all products error:", error);
+    res.status(500).json({ error: "Server error" });
+  }
+};
+
+exports.searchProducts = async (req, res) => {
+  if (!req.seller || !req.seller._id) {
+    return res.status(403).json({ error: "Unauthorized!" });
+  }
+
+  try {
+    const { category, keyword } = req.query;
+    const query = {};
+
+    if (!keyword || keyword.trim() === "") {
+      return res.status(200).json({ products: [] });
+    }
+
+    if (category) {
+      query.category = category;
+    }
+
+    const regex = new RegExp(keyword, "i");
+    query.$or = [
+      { title: { $regex: regex } },
+      { brand: { $regex: regex } },
+      { tags: { $regex: regex } },
+    ];
+
+    const products = await Product.find(query);
+
+    const formattedProducts = products.map((product) => ({
+      _id: product._id,
+      title: product.title,
+      price: product.price,
+      stock: product.quantity,
+      colour: product.colour,
+      model: product.model,
+      image:
+        product.productImages?.[0]?.length > 0
+          ? product.productImages[0].toString("base64")
+          : null,
+    }));
+
+    res.status(200).json({ products: formattedProducts });
+  } catch (error) {
+    console.error("Product search error:", error);
     res.status(500).json({ error: "Server error" });
   }
 };
@@ -434,8 +478,6 @@ exports.deleteProduct = async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 };
-
-// Additional utility endpoints
 
 exports.getProductsByCategory = async (req, res) => {
   try {

@@ -35,6 +35,9 @@ router.get(
   productController.getAllProducts
 );
 
+router.get('/search', auth, productController.searchProducts);
+
+
 router.get(
   '/:id',
   auth,

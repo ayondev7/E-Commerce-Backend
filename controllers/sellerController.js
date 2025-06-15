@@ -48,7 +48,7 @@ exports.createSeller = [
       const accessToken = jwt.sign(
         { sellerId: seller._id },
         process.env.JWT_SECRET,
-        { expiresIn: "1h" }
+        { expiresIn: "3h" }
       );
 
       res.status(201).json({
@@ -94,7 +94,7 @@ exports.loginSeller = [
       const accessToken = jwt.sign(
         { sellerId },
         process.env.JWT_SECRET,
-        { expiresIn: "1h" }
+        { expiresIn: "3h" }
       );
 
       const responseSellerData = {
