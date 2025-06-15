@@ -15,7 +15,7 @@ const routes = [
   { path: '/api/products', module: './routes/productRoutes' },
   { path: '/api/customers', module: './routes/customerRoutes' },
   // { path: '/api/carts', module: './routes/cartRoutes' },
-  // { path: '/api/wishlists', module: './routes/wishlistRoutes' },
+  { path: '/api/wishlists', module: './routes/wishlistRoutes' },
 ];
 
 routes.forEach(({ path, module }) => {

@@ -80,6 +80,10 @@ exports.createProduct = [
         return res.status(403).json({ error: "Unauthorized!" });
       }
 
+      if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: "At least one product image is required" });
+    }
+
       let productImages = [];
       if (req.files && req.files.length > 0) {
         if (req.files.length > 4) {
@@ -197,7 +201,7 @@ exports.getAllProducts = async (req, res) => {
 };
 
 exports.searchProducts = async (req, res) => {
-  if (!req.seller || !req.seller._id) {
+  if (!req.seller && !req.customer) {
     return res.status(403).json({ error: "Unauthorized!" });
   }
 
