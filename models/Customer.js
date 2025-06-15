@@ -1,7 +1,12 @@
 const mongoose = require('mongoose');
 
-const sellerSchema = new mongoose.Schema({
-  name: {
+const customerSchema = new mongoose.Schema({
+  firstName: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  lastName: {
     type: String,
     required: true,
     trim: true
@@ -19,7 +24,7 @@ const sellerSchema = new mongoose.Schema({
       message: "Please enter a valid email"
     }
   },
-   phone: {
+  phone: {
     type: String,
     trim: true,
     validate: {
@@ -29,16 +34,19 @@ const sellerSchema = new mongoose.Schema({
       message: "Please enter a valid phone number"
     }
   },
+  bio: {
+    type: String,
+    trim: true,
+  },
   password: {
     type: String,
-    required: true
+    required: true,
   },
-  sellerImage: {
-    type: Buffer,
-    required: true
+  customerImage: {
+    type: Buffer
   }
 }, {
   timestamps: true
 });
 
-module.exports = mongoose.model('Seller', sellerSchema);
+module.exports = mongoose.model('Customer', customerSchema);
