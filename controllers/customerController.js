@@ -99,19 +99,31 @@ exports.loginCustomer = [
 
 exports.getCustomerProfile = async (req, res) => {
   try {
-    const customer = await Customer.findById(req.customerId).select("-password");
-    if (!customer) return res.status(404).json({ error: "Customer not found" });
+    const customer = await Customer.findById(req.customer._id)
+      .select('-password -__v')
+      .lean();
 
-    const { customerImage, ...customerData } = customer.toObject();
+    if (!customer) {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
 
-    res.status(200).json({
-      ...customerData,
-      customerImage: customerImage ? customerImage.toString("base64") : null
-    });
+    const { customerImage, ...profile } = customer;
+
+    const responseData = {
+      ...profile,
+      customerImage: customerImage?.toString('base64') || null
+    };
+
+    return res.status(200).json(responseData);
+
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    return res.status(500).json({ 
+      error: 'Failed to fetch profile',
+      details: error.message 
+    });
   }
 };
+
 
 exports.updateCustomer = async (req, res) => {
   try {
@@ -128,7 +140,7 @@ exports.updateCustomer = async (req, res) => {
     }
 
     const customer = await Customer.findByIdAndUpdate(
-      req.customerId,
+      req.customer._id,
       updates,
       { new: true }
     ).select("-password");

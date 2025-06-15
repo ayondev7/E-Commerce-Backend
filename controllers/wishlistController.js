@@ -3,34 +3,84 @@ const mongoose = require("mongoose");
 const Product = require("../models/Product");
 const Seller = require("../models/Seller");
 
-exports.addToWishlist = async (req, res) => {
-  console.log("Request body:", req.body);
+exports.createList = async (req, res) => {
   try {
     const { customer } = req;
     const { _id: customerId } = customer;
-    const { productId } = req.body;
+    const { title } = req.body;
 
-    if (!productId) {
-      return res.status(400).json({ error: "Product ID is required" });
+    if (!title) {
+      return res.status(400).json({ error: "Title is required" });
     }
 
-    const existing = await Wishlist.findOne({
-      userId: customerId,
-      productId: productId,
-    });
+    const existing = await Wishlist.findOne({ customerId, title });
     if (existing) {
-      return res.status(409).json({ message: "Product already in wishlist" });
+      return res.status(409).json({ message: "A list with this title already exists" });
     }
 
-    const wishlistItem = new Wishlist({
-      userId: customerId,
-      productId: productId,
+    const wishlist = new Wishlist({
+      customerId,
+      title,
+      productIds: [],
     });
-    await wishlistItem.save();
 
-    res.status(201).json({ message: "Added to wishlist" });
+    await wishlist.save();
+
+    res.status(201).json({ message: "Wishlist created", wishlist });
   } catch (error) {
-    console.error("Add to wishlist error:", error);
+    console.error("Create list error:", error);
+    res.status(500).json({ error: "Server error" });
+  }
+};
+
+exports.addToList = async (req, res) => {
+  try {
+    const { customer } = req;
+    const { _id: customerId } = customer;
+    const { wishlistId, productId } = req.body;
+
+    if (!wishlistId || !productId) {
+      return res.status(400).json({ error: "wishlistId and productId are required" });
+    }
+
+    const existingWishlistWithProduct = await Wishlist.findOne({ 
+      customerId, 
+      productIds: productId 
+    });
+
+    if (existingWishlistWithProduct) {
+      return res.status(409).json({ 
+        message: "Product already exists in one of your wishlists",
+        existingWishlistId: existingWishlistWithProduct._id
+      });
+    }
+
+    const wishlist = await Wishlist.findOne({ _id: wishlistId, customerId });
+
+    if (!wishlist) {
+      return res.status(404).json({ error: "Wishlist not found" });
+    }
+    
+    wishlist.productIds.push(productId);
+    await wishlist.save();
+
+    res.status(200).json({ message: "Product added to wishlist", wishlist });
+  } catch (error) {
+    console.error("Add to list error:", error);
+    res.status(500).json({ error: "Server error" });
+  }
+};
+
+exports.getAllLists= async (req, res) => {
+  try {
+    const { customer } = req;
+    const { _id: customerId } = customer;
+
+    const wishlists = await Wishlist.find({ customerId }).select('-__v');
+
+    res.status(200).json({ wishlists });
+  } catch (error) {
+    console.error("Error fetching wishlists:", error);
     res.status(500).json({ error: "Server error" });
   }
 };
@@ -40,53 +90,37 @@ exports.getWishlistItems = async (req, res) => {
     const { customer } = req;
     const { _id: customerId } = customer;
 
-    const wishlistItems = await Wishlist.find({ userId: customerId })
+    const wishlists = await Wishlist.find({ customerId })
       .populate({
-        path: 'productId',
-        select: 'title price quantity colour model productImages sellerId',
-        populate: {
-          path: 'sellerId',
-          select: 'name'
-        }
+        path: 'productIds',
+        select: 'title price quantity colour model productImages'
       });
 
-    const sellersMap = new Map();
-    
-    wishlistItems.forEach(item => {
-      const product = item.productId;
-      const seller = product.sellerId;
-      
-      if (!sellersMap.has(seller._id.toString())) {
-        sellersMap.set(seller._id.toString(), {
-          sellerId: seller._id,
-          sellerName: seller.name,
-          products: []
-        });
-      }
-      
-      const sellerGroup = sellersMap.get(seller._id.toString());
-      
-      sellerGroup.products.push({
+    const results = wishlists.map((list) => ({
+      title: list.title,
+      _id: list._id,
+      products: list.productIds.map((product) => ({
         _id: product._id,
         title: product.title,
         price: product.price,
         stock: product.quantity,
         colour: product.colour,
         model: product.model,
-        image: product.productImages?.length > 0 && Buffer.isBuffer(product.productImages[0])
-          ? product.productImages[0].toString('base64')
-          : null
-      });
-    });
+        image:
+          product.productImages?.length > 0 && Buffer.isBuffer(product.productImages[0])
+            ? product.productImages[0].toString('base64')
+            : null
+      }))
+    }));
 
-    const results = Array.from(sellersMap.values());
-
-    res.status(200).json({ sellers: results });
+    res.status(200).json({ lists: results });
   } catch (error) {
     console.error("Error fetching wishlist items:", error);
     res.status(500).json({ error: "Server error" });
   }
 };
+
+
 
 exports.removeFromWishlist = async (req, res) => {
   try {

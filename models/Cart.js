@@ -1,16 +1,22 @@
 const mongoose = require('mongoose');
 
 const cartSchema = new mongoose.Schema({
-  userId: {
+  customerId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Customer',
-    required: true
+    required: true,
   },
-  productId: {
+  wishlistId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Product',
-    required: true
-  }
+    ref: 'Wishlist',
+    required: true,
+  },
+  productIds: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Product',
+    }
+  ]
 }, {
   timestamps: true
 });

@@ -3,9 +3,9 @@ const Seller = require("../models/Seller");
 const Customer = require("../models/Customer");
 
 const auth = async (req, res, next) => {
-  console.log("req.headers.authorization", req.headers.authorization);
   try {
     const authHeader = req.headers.authorization;
+    console.log("authHeader", authHeader);
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return res.status(401).json({ error: "No token provided" });
     }
