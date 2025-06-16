@@ -19,7 +19,7 @@ exports.addAddress = async (req, res) => {
       zipCode,
       country,
       state,
-      name,
+      name: name?.trim() || "Unnamed",
       isDefault: !!isDefault
     });
 
