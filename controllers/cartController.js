@@ -91,53 +91,63 @@ exports.getCartItems = async (req, res) => {
     const { customer } = req;
     const { _id: customerId } = customer;
 
-    const cartItems = await Cart.find({ customerId: customerId })  
+    const carts = await Cart.find({ customerId })
       .populate({
-        path: 'productId',
-        select: 'title price quantity colour model productImages sellerId',
-        populate: {
-          path: 'sellerId',
-          select: 'name'
-        }
+        path: 'productIds',
+        select: 'title price quantity colour model productImages'
+      })
+      .populate({
+        path: 'wishlistId',
+        select: 'title'
       });
 
-    const sellersMap = new Map();
-    
-    cartItems.forEach(item => {
-      const product = item.productId;
-      const seller = product.sellerId;
-      
-      if (!sellersMap.has(seller._id.toString())) {
-        sellersMap.set(seller._id.toString(), {
-          sellerId: seller._id,
-          sellerName: seller.name,
+    const grouped = {};
+    let totalProductsCount = 0;
+
+    for (const cart of carts) {
+      const wishlist = cart.wishlistId;
+
+      if (!wishlist) continue;
+
+      const wishlistKey = wishlist._id.toString();
+
+      if (!grouped[wishlistKey]) {
+        grouped[wishlistKey] = {
+          _id: wishlist._id,
+          title: wishlist.title,
           products: []
-        });
+        };
       }
-      
-      const sellerGroup = sellersMap.get(seller._id.toString());
-      
-      sellerGroup.products.push({
+
+      const products = cart.productIds.map((product) => ({
         _id: product._id,
         title: product.title,
         price: product.price,
         stock: product.quantity,
         colour: product.colour,
         model: product.model,
-        image: product.productImages?.length > 0 && Buffer.isBuffer(product.productImages[0])
-          ? product.productImages[0].toString('base64')
-          : null
-      });
+        image:
+          product.productImages?.length > 0 && Buffer.isBuffer(product.productImages[0])
+            ? product.productImages[0].toString("base64")
+            : null
+      }));
+
+      grouped[wishlistKey].products.push(...products);
+      totalProductsCount += products.length;
+    }
+
+    const results = Object.values(grouped);
+
+    res.status(200).json({ 
+      lists: results,
+      productsCount: totalProductsCount 
     });
-
-    const results = Array.from(sellersMap.values());
-
-    res.status(200).json({ sellers: results });
   } catch (error) {
     console.error("Error fetching cart items:", error);
     res.status(500).json({ error: "Server error" });
   }
 };
+
 
 exports.removeFromCart = async (req, res) => {
   try {
