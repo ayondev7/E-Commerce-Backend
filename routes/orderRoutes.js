@@ -3,11 +3,11 @@ const router = express.Router();
 const auth = require('../middleware/auth');
 const orderController = require('../controllers/orderController');
 
-// Create new order
 router.post('/add-order', auth, orderController.AddOrder);
 
-// // Get all orders for authenticated user
-// router.get('/get-all', auth, orderController.getAllOrders);
+router.get('/get-all', auth, orderController.getAllOrders);
+
+router.get('/get-seller-orders', auth, orderController.getSellerOrders);
 
 // // Get single order by ID
 // router.get('/:id', auth, orderController.getOrderById);

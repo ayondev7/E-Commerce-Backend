@@ -1,9 +1,9 @@
-const Address = require('../models/Address');
-const ShippingInfo = require('../models/ShippingInfo');
-const Order = require('../models/Order');
-const mongoose = require('mongoose');
-const Cart = require('../models/Cart');
-
+const Address = require("../models/Address");
+const ShippingInfo = require("../models/ShippingInfo");
+const Order = require("../models/Order");
+const mongoose = require("mongoose");
+const Cart = require("../models/Cart");
+const Product = require("../models/Product");
 exports.AddOrder = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -23,7 +23,7 @@ exports.AddOrder = async (req, res) => {
       zipCode,
       country,
       name,
-      checkoutPayload
+      checkoutPayload,
     } = req.body;
 
     const customerId = req.customer?._id;
@@ -33,16 +33,20 @@ exports.AddOrder = async (req, res) => {
       session.endSession();
       return res.status(400).json({
         success: false,
-        message: 'Customer ID is required'
+        message: "Customer ID is required",
       });
     }
 
-    if (!checkoutPayload || !checkoutPayload.products || checkoutPayload.products.length === 0) {
+    if (
+      !checkoutPayload ||
+      !checkoutPayload.products ||
+      checkoutPayload.products.length === 0
+    ) {
       await session.abortTransaction();
       session.endSession();
       return res.status(400).json({
         success: false,
-        message: 'Products are required in checkout payload'
+        message: "Products are required in checkout payload",
       });
     }
 
@@ -50,41 +54,41 @@ exports.AddOrder = async (req, res) => {
     let primaryAddressId = addressId;
     let optionalAddressId = null;
 
-    // Handle address creation if addressId is not provided
     if (!addressId) {
       if (!addressLine1 || !city || !zipCode || !country) {
         await session.abortTransaction();
         session.endSession();
         return res.status(400).json({
           success: false,
-          message: 'Address details are required when addressId is not provided'
+          message:
+            "Address details are required when addressId is not provided",
         });
       }
 
       const primaryAddress = new Address({
         customerId,
-        name: name || 'Unnamed',
+        name: name || "Unnamed",
         addressLine: addressLine1,
         city,
         zipCode,
         country,
-        state: state || '',
-        isDefault: false
+        state: state || "",
+        isDefault: false,
       });
 
       const savedPrimaryAddress = await primaryAddress.save({ session });
       primaryAddressId = savedPrimaryAddress._id;
 
-      if (addressLine2 && addressLine2.trim() !== '') {
+      if (addressLine2 && addressLine2.trim() !== "") {
         const optionalAddress = new Address({
           customerId,
-          name: name || 'Unnamed',
+          name: name || "Unnamed",
           addressLine: addressLine2,
           city,
           zipCode,
           country,
-          state: state || '',
-          isDefault: false
+          state: state || "",
+          isDefault: false,
         });
 
         const savedOptionalAddress = await optionalAddress.save({ session });
@@ -92,7 +96,6 @@ exports.AddOrder = async (req, res) => {
       }
     }
 
-    // Create shipping info
     const shippingInfo = new ShippingInfo({
       customerId,
       fullName,
@@ -105,7 +108,6 @@ exports.AddOrder = async (req, res) => {
     const savedShippingInfo = await shippingInfo.save({ session });
     shippingInfoId = savedShippingInfo._id;
 
-    // Create orders for each product
     const createdOrders = [];
     const products = checkoutPayload.products;
 
@@ -117,7 +119,7 @@ exports.AddOrder = async (req, res) => {
         session.endSession();
         return res.status(400).json({
           success: false,
-          message: 'Each product must have productId, quantity, and price'
+          message: "Each product must have productId, quantity, and price",
         });
       }
 
@@ -128,25 +130,26 @@ exports.AddOrder = async (req, res) => {
         price,
         paymentMethod,
         shippingInfoId,
-        paymentStatus: 'pending',
-        orderStatus: 'pending'
+        paymentStatus: "pending",
+        orderStatus: "pending",
       });
 
       const savedOrder = await order.save({ session });
       createdOrders.push(savedOrder);
     }
 
-    // Remove ordered productIds from cart
-    const orderedProductIds = products.map(p => p.productId);
+    const orderedProductIds = products.map((p) => p.productId);
 
     const carts = await Cart.find({ customerId }).session(session);
 
     for (const cart of carts) {
       const productIdsArray = Array.isArray(cart.productIds)
-        ? cart.productIds.map(id => id.toString())
+        ? cart.productIds.map((id) => id.toString())
         : [cart.productIds.toString()];
 
-      const remaining = productIdsArray.filter(id => !orderedProductIds.includes(id));
+      const remaining = productIdsArray.filter(
+        (id) => !orderedProductIds.includes(id)
+      );
 
       if (remaining.length === 0) {
         await Cart.deleteOne({ _id: cart._id }).session(session);
@@ -161,13 +164,13 @@ exports.AddOrder = async (req, res) => {
 
     return res.status(201).json({
       success: true,
-      message: 'Orders created successfully',
+      message: "Orders created successfully",
       data: {
         orders: createdOrders,
         shippingInfo: savedShippingInfo,
         addresses: {
           primary: primaryAddressId,
-          optional: optionalAddressId
+          optional: optionalAddressId,
         },
         orderSummary: {
           totalOrders: createdOrders.length,
@@ -175,20 +178,115 @@ exports.AddOrder = async (req, res) => {
           shipping: checkoutPayload.shipping || 0,
           tax: checkoutPayload.tax || 0,
           total: checkoutPayload.total,
-        }
-      }
+        },
+      },
     });
-
   } catch (error) {
     await session.abortTransaction();
     session.endSession();
 
-    console.error('Error creating order:', error);
+    console.error("Error creating order:", error);
 
     return res.status(500).json({
       success: false,
-      message: 'Failed to create order',
-      error: error.message
+      message: "Failed to create order",
+      error: error.message,
+    });
+  }
+};
+
+exports.getAllOrders = async (req, res) => {
+  try {
+    const { customer } = req;
+
+    if (!customer || !customer._id) {
+      return res.status(400).json({
+        success: false,
+        message: "Customer information not found",
+      });
+    }
+
+    const orders = await Order.find({ customerId: customer._id })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const transformedOrders = orders.map((order, index) => {
+      const orderNumber = String(index + 1).padStart(3, "0");
+      return {
+        ...order,
+        orderId: `ORD-${orderNumber}`,
+        status: order.orderStatus,
+        orderStatus: undefined,
+      };
+    });
+
+    res.status(200).json({
+      success: true,
+      count: transformedOrders.length,
+      data: transformedOrders,
+    });
+  } catch (error) {
+    console.error("Error fetching orders:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error while fetching orders",
+      error: error.message,
+    });
+  }
+};
+
+exports.getSellerOrders = async (req, res) => {
+  try {
+    const { seller } = req;
+
+    if (!seller || !seller._id) {
+      return res.status(400).json({
+        success: false,
+        message: "Seller information not found",
+      });
+    }
+
+    const sellerProducts = await Product.find(
+      { sellerId: seller._id },
+      "_id"
+    ).lean();
+    const sellerProductIds = sellerProducts.map((p) => p._id);
+
+    const sellerOrders = await Order.find({
+      productId: { $in: sellerProductIds },
+    })
+      .sort({ createdAt: -1 })
+      .populate("customerId", "firstName lastName")
+      .lean();
+
+    const transformedOrders = sellerOrders.map((order, index) => {
+      const orderNumber = String(index + 1).padStart(3, "0");
+
+      return {
+        _id: order._id,
+        orderId: `ORD-${orderNumber}`,
+        status: order.paymentStatus,
+        createdAt: order.createdAt,
+        updatedAt: order.updatedAt,
+        price: order.price,
+        quantity: order.quantity,
+        customerName: `${order.customerId?.firstName || ""} ${
+          order.customerId?.lastName || ""
+        }`.trim(),
+      };
+    });
+
+    res.status(200).json({
+      success: true,
+      count: transformedOrders.length,
+      data: transformedOrders,
+    });
+  } catch (error) {
+    console.error("Error fetching seller orders:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error while fetching seller orders",
+      error: error.message,
     });
   }
 };
