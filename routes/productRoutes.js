@@ -35,6 +35,12 @@ router.get(
   productController.getAllProducts
 );
 
+router.post(
+  '/get-all-by-id',
+  auth,
+  productController.getAllProductsById
+);
+
 router.get('/search', auth, productController.searchProducts);
 
 

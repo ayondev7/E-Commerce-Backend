@@ -200,6 +200,59 @@ exports.getAllProducts = async (req, res) => {
   }
 };
 
+exports.getAllProductsById = async (req, res) => {
+  try {
+    const { products } = req.body;
+
+    if (!products || !Array.isArray(products) || products.length === 0) {
+      return res.status(400).json({ error: "No products provided" });
+    }
+
+    const productIds = products.map((p) => p.productId || p.id);
+
+    
+    const dbProducts = await Product.find({ _id: { $in: productIds } });
+
+   
+    const formattedProducts = products.map((requestedProduct) => {
+      const requestedId = requestedProduct.productId || requestedProduct.id;
+      const quantity = requestedProduct.quantity;
+
+      const dbProduct = dbProducts.find(
+        (p) => p._id.toString() === requestedId
+      );
+
+      if (!dbProduct) {
+        return {
+          _id: requestedId,
+          quantity,
+          error: "Product not found",
+        };
+      }
+
+      return {
+        _id: dbProduct._id,
+        title: dbProduct.title,
+        sku: dbProduct.sku,
+        price: dbProduct.price,
+        quantity, 
+        colour: dbProduct.colour,
+        model: dbProduct.model,
+        image: dbProduct.productImages?.[0]
+          ? dbProduct.productImages[0].toString("base64")
+          : null,
+      };
+    });
+
+    res.status(200).json({ products: formattedProducts });
+  } catch (error) {
+    console.error("Get products by ID(s) error:", error);
+    res.status(500).json({ error: "Server error" });
+  }
+};
+
+
+
 exports.searchProducts = async (req, res) => {
   if (!req.seller && !req.customer) {
     return res.status(403).json({ error: "Unauthorized!" });
