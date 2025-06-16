@@ -27,15 +27,21 @@ const orderSchema = new mongoose.Schema(
       ref: 'ShippingInfo',
       required: true,
     },
-    subTotal: {
-      type: Number,
+    paymentStatus: {
+      type: String,
       required: true,
-      min: 0,
+      default: 'pending',
+      enum: ['pending', 'paid', 'failed'],
     },
-    shippingTax: {
-      type: Number,
+    orderStatus: {
+      type: String,
       required: true,
-      min: 0,
+      default: 'pending', 
+      enum: ['pending', 'shipped', 'delivered', 'cancelled'],
+    },
+    paymentMethod: {
+      type: String,
+      required: true,
     },
   },
   { timestamps: true }

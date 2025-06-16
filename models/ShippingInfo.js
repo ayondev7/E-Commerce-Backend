@@ -32,10 +32,6 @@ const shippingInfoSchema = new mongoose.Schema(
       ref: 'Address',
       default: null,
     },
-    cashOnDelivery: {
-      type: Boolean,
-      required: true,
-    },
   },
   { timestamps: true }
 );
