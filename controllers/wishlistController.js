@@ -71,8 +71,12 @@ exports.addToList = async (req, res) => {
   }
 };
 
-exports.getAllLists= async (req, res) => {
+exports.getAllLists = async (req, res) => {
   try {
+    if (req.seller) {
+      return res.status(200).json({ wishlists: [] });
+    }
+
     const { customer } = req;
     const { _id: customerId } = customer;
 
@@ -84,6 +88,7 @@ exports.getAllLists= async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 };
+
 
 exports.getWishlistItems = async (req, res) => {
   try {

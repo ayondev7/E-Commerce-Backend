@@ -185,7 +185,8 @@ exports.getAllProducts = async (req, res) => {
         title: product.title,
         sku: product.sku,
         price: product.price,
-        stock: product.quantity,
+        category: product.category,
+        stockStatus: status,
         status,
         image: product.productImages?.[0]?.length
           ? product.productImages[0].toString("base64")
@@ -251,8 +252,6 @@ exports.getAllProductsById = async (req, res) => {
   }
 };
 
-
-
 exports.searchProducts = async (req, res) => {
   if (!req.seller && !req.customer) {
     return res.status(403).json({ error: "Unauthorized!" });
@@ -299,33 +298,48 @@ exports.searchProducts = async (req, res) => {
   }
 };
 
-exports.getProductById = async (req, res) => {
+exports.getSingleProduct = async (req, res) => {
   try {
     const { id } = req.params;
+    const sellerId = req.seller?._id;
+
+    if (!sellerId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
 
     const product = await Product.findOne({
       _id: id,
-      sellerId: req.sellerId,
-    }).populate("sellerId", "name email");
+      sellerId,
+    });
 
     if (!product) {
-      return res.status(404).json({ error: "Product not found" });
+      return res.status(404).json({ error: 'Product not found' });
     }
 
     const productObj = product.toObject();
-    const productWithImages = {
-      ...productObj,
-      productImages: productObj.productImages.map((img) =>
-        img.toString("base64")
-      ),
-    };
 
-    res.status(200).json(productWithImages);
+    
+    productObj.productImages = productObj.productImages.map((img) =>
+      img ? img.toString('base64') : null
+    );
+
+    
+    const quantity = productObj.quantity;
+    if (quantity === 0) {
+      productObj.stock = "out of stock";
+    } else if (quantity <= 10) {
+      productObj.stock = "low stock";
+    } else {
+      productObj.stock = "active";
+    }
+
+    return res.status(200).json(productObj);
   } catch (error) {
-    console.error("Get product by ID error:", error);
-    res.status(500).json({ error: "Server error" });
+    console.error('Error fetching product:', error);
+    return res.status(500).json({ error: 'Internal Server Error' });
   }
 };
+
 
 exports.updateProduct = [
   body("title")
@@ -518,15 +532,21 @@ exports.updateProduct = [
 
 exports.deleteProduct = async (req, res) => {
   try {
-    const { id } = req.params;
+    const { seller } = req;
+    const { _id: sellerId } = seller;
+    const { id: productId } = req.params;
+
+    if (!sellerId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
 
     const product = await Product.findOneAndDelete({
-      _id: id,
-      sellerId: req.sellerId,
+      _id: productId,
+      sellerId: sellerId,
     });
 
     if (!product) {
-      return res.status(404).json({ error: "Product not found" });
+      return res.status(404).json({ error: "Product not found or not authorized" });
     }
 
     res.status(200).json({ message: "Product deleted successfully" });

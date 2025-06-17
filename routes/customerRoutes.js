@@ -30,13 +30,12 @@ router.post('/login', customerController.loginCustomer);
 
 router.get('/get-all-customers', auth, customerController.getAllCustomers);
 
+router.get('/get-overview-stats', auth, customerController.getCustomerStats);
+
 
 router.get('/profile', auth, customerController.getCustomerProfile);
 
 
 router.patch('/update', auth, upload.single('customerImage'), customerController.updateCustomer);
-
-
-// router.delete('/delete', auth, customerController.deleteCustomer);
 
 module.exports = router;

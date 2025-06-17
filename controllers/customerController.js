@@ -3,6 +3,8 @@ const { body, validationResult } = require("express-validator");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const sharp = require("sharp");
+const Order = require("../models/Order");
+const Wishlist = require("../models/Wishlist");
 
 const buildCustomerPayload = async ({ firstName, lastName, email, password, phone, bio }, file) => {
   const customerImage = file
@@ -173,5 +175,32 @@ exports.getAllCustomers = async (req, res) => {
     res.status(200).json(customersWithImages);
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+};
+
+exports.getCustomerStats = async (req, res) => {
+  try {
+    const { customer } = req;
+    const { _id: customerId } = customer;
+    const totalOrders = await Order.countDocuments({ customerId });
+    const pendingOrders = await Order.countDocuments({
+      customerId,
+      orderStatus: 'pending',
+    });
+    
+    const wishlists = await Wishlist.find({ customerId }, 'productIds');
+    const totalWishlistItems = wishlists.reduce(
+      (total, wl) => total + (wl.productIds?.length || 0),
+      0
+    );
+
+    res.status(200).json({
+      totalOrders,
+      pendingOrders,
+      totalWishlistItems,
+    });
+  } catch (error) {
+    console.error('Error fetching customer stats:', error);
+    res.status(500).json({ error: 'Server error' });
   }
 };

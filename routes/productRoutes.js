@@ -45,9 +45,9 @@ router.get('/search', auth, productController.searchProducts);
 
 
 router.get(
-  '/:id',
+  '/get-product/:id',
   auth,
-  productController.getProductById
+  productController.getSingleProduct
 );
 
 router.put(
@@ -58,7 +58,7 @@ router.put(
 );
 
 router.delete(
-  '/:id',
+  '/delete/:id',
   auth,
   productController.deleteProduct
 );

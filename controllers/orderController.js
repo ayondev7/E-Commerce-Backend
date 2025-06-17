@@ -401,3 +401,54 @@ exports.updateOrderStatus = async (req, res) => {
     res.status(500).json({ message: "Internal server error." });
   }
 };
+
+exports.getOrderStatusCounts = async (req, res) => {
+  try {
+    const { seller } = req;
+    const { _id: sellerId } = seller;
+
+    const sellerProducts = await Product.find({ sellerId }, '_id');
+    const productIds = sellerProducts.map((p) => p._id);
+
+    if (productIds.length === 0) {
+      return res.status(200).json({
+        pending: 0,
+        shipped: 0,
+        delivered: 0,
+        cancelled: 0,
+      });
+    }
+
+    const counts = await Order.aggregate([
+      {
+        $match: {
+          productId: { $in: productIds },
+        },
+      },
+      {
+        $group: {
+          _id: '$orderStatus',
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const result = {
+      pending: 0,
+      shipped: 0,
+      delivered: 0,
+      cancelled: 0,
+    };
+
+    counts.forEach(({ _id, count }) => {
+      result[_id] = count;
+    });
+
+    res.status(200).json(result);
+  } catch (error) {
+    console.error('Error getting order status counts:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+
