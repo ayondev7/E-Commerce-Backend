@@ -6,10 +6,10 @@ const cartSchema = new mongoose.Schema({
     ref: 'Customer',
     required: true,
   },
-  wishlistId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Wishlist',
+  title: {
+    type: String,
     required: true,
+    trim: true,
   },
   productIds: [
     {

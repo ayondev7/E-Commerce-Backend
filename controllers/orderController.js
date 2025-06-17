@@ -223,7 +223,7 @@ exports.getAllOrders = async (req, res) => {
     res.status(200).json({
       success: true,
       count: transformedOrders.length,
-      data: transformedOrders,
+      orders: transformedOrders,
     });
   } catch (error) {
     console.error("Error fetching orders:", error);

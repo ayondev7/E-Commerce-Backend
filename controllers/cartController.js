@@ -5,16 +5,10 @@ const Seller = require("../models/Seller");
 const Wishlist = require("../models/Wishlist");
 
 exports.addToCart = async (req, res) => {
-  console.log("Request body:", req.body);
   try {
     const { customer } = req;
     const { _id: customerId } = customer;
-
-    let entries = req.body;
-
-    if (!Array.isArray(entries)) {
-      entries = [entries];
-    }
+    let entries = Array.isArray(req.body) ? req.body : [req.body];
 
     const added = [];
     const skipped = [];
@@ -29,22 +23,27 @@ exports.addToCart = async (req, res) => {
         continue;
       }
 
+     
+      const wishlist = await Wishlist.findById(wishlistId);
+      if (!wishlist) {
+        skipped.push({ wishlistId, reason: "Wishlist not found" });
+        continue;
+      }
+
+      const title = wishlist.title;
       const productIds = Array.isArray(productId) ? productId : [productId];
 
-      let cart = await Cart.findOne({ customerId, wishlistId });
-
-      if (!cart) {
-        cart = new Cart({ customerId, wishlistId, productIds: [] });
-      }
+      let cart = await Cart.findOne({ customerId, title }) || 
+                 new Cart({ customerId, title, productIds: [] });
 
       const productsToRemoveFromWishlist = [];
 
       for (const pid of productIds) {
         if (cart.productIds.includes(pid)) {
-          skipped.push({ wishlistId, productId: pid, reason: "Already in cart" });
+          skipped.push({ title, productId: pid, reason: "Already in cart" });
         } else {
           cart.productIds.push(pid);
-          added.push({ wishlistId, productId: pid });
+          added.push({ title, productId: pid });
           productsToRemoveFromWishlist.push(pid);
         }
       }
@@ -52,20 +51,16 @@ exports.addToCart = async (req, res) => {
       await cart.save();
 
       if (productsToRemoveFromWishlist.length > 0) {
-        const wishlist = await Wishlist.findById(wishlistId);
-        
-        if (wishlist) {
-          wishlist.productIds = wishlist.productIds.filter(
-            id => !productsToRemoveFromWishlist.includes(id.toString())
-          );
+        wishlist.productIds = wishlist.productIds.filter(
+          id => !productsToRemoveFromWishlist.includes(id.toString())
+        );
 
-          if (wishlist.productIds.length === 0) {
-            await Wishlist.findByIdAndDelete(wishlistId);
-            deletedWishlistIds.push(wishlistId);
-          } else {
-            await wishlist.save();
-            updatedWishlistIds.push(wishlistId);
-          }
+        if (wishlist.productIds.length === 0) {
+          await Wishlist.findByIdAndDelete(wishlistId);
+          deletedWishlistIds.push(wishlistId);
+        } else {
+          await wishlist.save();
+          updatedWishlistIds.push(wishlistId);
         }
       }
     }
@@ -79,6 +74,7 @@ exports.addToCart = async (req, res) => {
       added,
       skipped,
     });
+
   } catch (error) {
     console.error("Add to cart error:", error);
     res.status(500).json({ error: "Server error" });
@@ -86,35 +82,30 @@ exports.addToCart = async (req, res) => {
 };
 
 
+
 exports.getCartItems = async (req, res) => {
   try {
     const { customer } = req;
     const { _id: customerId } = customer;
 
-    const carts = await Cart.find({ customerId })
-      .populate({
-        path: 'productIds',
-        select: 'title price quantity colour model productImages'
-      })
-      .populate({
-        path: 'wishlistId',
-        select: 'title'
-      });
+    console.log("customerId", customerId);
+
+    const carts = await Cart.find({ customerId }).populate({
+      path: 'productIds',
+      select: 'title price quantity colour model productImages'
+    });
 
     const grouped = {};
     let totalProductsCount = 0;
 
     for (const cart of carts) {
-      const wishlist = cart.wishlistId;
+      const title = cart.title;
 
-      if (!wishlist) continue;
+      if (!title) continue;
 
-      const wishlistKey = wishlist._id.toString();
-
-      if (!grouped[wishlistKey]) {
-        grouped[wishlistKey] = {
-          _id: wishlist._id,
-          title: wishlist.title,
+      if (!grouped[title]) {
+        grouped[title] = {
+          title,
           products: []
         };
       }
@@ -132,7 +123,7 @@ exports.getCartItems = async (req, res) => {
             : null
       }));
 
-      grouped[wishlistKey].products.push(...products);
+      grouped[title].products.push(...products);
       totalProductsCount += products.length;
     }
 
@@ -147,6 +138,7 @@ exports.getCartItems = async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 };
+
 
 
 exports.removeFromCart = async (req, res) => {
