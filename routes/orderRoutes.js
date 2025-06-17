@@ -11,8 +11,8 @@ router.get('/get-seller-orders', auth, orderController.getSellerOrders);
 
 router.get('/get-seller-order/:id', auth, orderController.getOrderById);
 
-// // Update order status (for admin or specific use cases)
-// router.put('/update-status/:id', auth, orderController.updateOrderStatus);
+router.patch('/update-status/:orderId', auth, orderController.updateOrderStatus);
+
 
 // // Update payment status
 // router.put('/update-payment/:id', auth, orderController.updatePaymentStatus);

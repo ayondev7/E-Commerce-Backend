@@ -265,7 +265,7 @@ exports.getSellerOrders = async (req, res) => {
       return {
         _id: order._id,
         orderId: `ORD-${orderNumber}`,
-        status: order.paymentStatus,
+        status: order.orderStatus,
         createdAt: order.createdAt,
         updatedAt: order.updatedAt,
         price: order.price,
@@ -363,5 +363,41 @@ exports.getOrderById = async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server error' });
+  }
+};
+
+exports.updateOrderStatus = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { orderStatus } = req.body;
+    const sellerId = req.seller._id;
+
+    if (!orderId || !orderStatus) {
+      return res.status(400).json({ message: "Order ID and orderStatus are required." });
+    }
+
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return res.status(404).json({ message: "Order not found." });
+    }
+
+  
+    const product = await Product.findOne({
+      _id: order.productId,
+      sellerId: sellerId,
+    });
+
+    if (!product) {
+      return res.status(403).json({ message: "You are not authorized to update this order." });
+    }
+
+  
+    order.orderStatus = orderStatus;
+    await order.save();
+
+    res.status(200).json({ message: "Order status updated successfully.", order });
+  } catch (error) {
+    console.error("Error updating order status:", error);
+    res.status(500).json({ message: "Internal server error." });
   }
 };
