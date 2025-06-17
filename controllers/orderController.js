@@ -290,3 +290,78 @@ exports.getSellerOrders = async (req, res) => {
     });
   }
 };
+
+exports.getOrderById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const sellerId = req.seller._id;
+
+    const order = await Order.findOne({ _id: id })
+      .populate({
+        path: 'productId',
+        match: { sellerId },
+        select: 'title price salePrice category brand model storage colour ram sku tags negotiable productImages quantity conditions',
+      })
+      .populate({
+        path: 'shippingInfoId',
+        populate: [
+          { path: 'addressId' },
+          { path: 'optionalAddressId' }
+        ]
+      });
+
+    if (!order || !order.productId) {
+      return res.status(404).json({ message: 'Order not found or unauthorized' });
+    }
+
+    const product = order.productId.toObject();
+
+    const stockStatus = product.quantity === 0
+      ? "out of stock"
+      : product.quantity <= 10
+      ? "low stock"
+      : "active";
+
+    const firstImageBase64 = product.productImages?.[0]
+      ? product.productImages[0].toString('base64')
+      : null;
+
+    const response = {
+      _id: order._id,
+      quantity: order.quantity,
+      price: order.price,
+      paymentStatus: order.paymentStatus,
+      orderStatus: order.orderStatus,
+      paymentMethod: order.paymentMethod,
+      createdAt: order.createdAt,
+      updatedAt: order.updatedAt,
+
+      product: {
+        _id: product._id,
+        title: product.title,
+        price: product.price,
+        salePrice: product.salePrice,
+        category: product.category,
+        brand: product.brand,
+        model: product.model,
+        storage: product.storage,
+        colour: product.colour,
+        condition: product.conditions[0],
+        ram: product.ram,
+        sku: product.sku,
+        negotiable: product.negotiable,
+        tags: product.tags,
+        quantity: product.quantity,
+        stockStatus,
+        firstImageBase64,
+      },
+
+      shippingInfo: order.shippingInfoId,
+    };
+
+    res.json(response);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};

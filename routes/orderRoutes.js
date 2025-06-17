@@ -9,8 +9,7 @@ router.get('/get-all', auth, orderController.getAllOrders);
 
 router.get('/get-seller-orders', auth, orderController.getSellerOrders);
 
-// // Get single order by ID
-// router.get('/:id', auth, orderController.getOrderById);
+router.get('/get-seller-order/:id', auth, orderController.getOrderById);
 
 // // Update order status (for admin or specific use cases)
 // router.put('/update-status/:id', auth, orderController.updateOrderStatus);
