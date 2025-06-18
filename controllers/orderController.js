@@ -370,7 +370,9 @@ exports.updateOrderStatus = async (req, res) => {
   try {
     const { orderId } = req.params;
     const { orderStatus } = req.body;
-    const sellerId = req.seller._id;
+
+    const sellerId = req.seller?._id;
+    const customerId = req.customer?._id;
 
     if (!orderId || !orderStatus) {
       return res.status(400).json({ message: "Order ID and orderStatus are required." });
@@ -381,17 +383,38 @@ exports.updateOrderStatus = async (req, res) => {
       return res.status(404).json({ message: "Order not found." });
     }
 
-  
-    const product = await Product.findOne({
-      _id: order.productId,
-      sellerId: sellerId,
-    });
+    if (sellerId) {
+      const product = await Product.findOne({
+        _id: order.productId,
+        sellerId: sellerId,
+      });
 
-    if (!product) {
-      return res.status(403).json({ message: "You are not authorized to update this order." });
+      if (!product) {
+        return res.status(403).json({ message: "You are not authorized to update this order." });
+      }
+    } else if (customerId) {
+      if (String(order.customerId) !== String(customerId)) {
+        return res.status(403).json({ message: "You are not authorized to update this order." });
+      }
+    } else {
+      return res.status(401).json({ message: "Unauthorized request." });
     }
 
-  
+    if (orderStatus === "buy again") {
+      const newOrderData = order.toObject();
+      delete newOrderData._id;
+      newOrderData.orderStatus = "pending";
+      newOrderData.createdAt = new Date();
+      newOrderData.updatedAt = new Date();
+
+      const newOrder = await Order.create(newOrderData);
+
+      return res.status(201).json({
+        message: "New order created successfully for Buy Again.",
+        newOrder,
+      });
+    }
+
     order.orderStatus = orderStatus;
     await order.save();
 
@@ -401,6 +424,7 @@ exports.updateOrderStatus = async (req, res) => {
     res.status(500).json({ message: "Internal server error." });
   }
 };
+
 
 exports.getOrderStatusCounts = async (req, res) => {
   try {

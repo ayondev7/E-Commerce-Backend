@@ -185,6 +185,7 @@ exports.getAllProducts = async (req, res) => {
         title: product.title,
         sku: product.sku,
         price: product.price,
+        stock: product.quantity,
         category: product.category,
         stockStatus: status,
         status,

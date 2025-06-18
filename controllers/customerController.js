@@ -77,12 +77,12 @@ exports.loginCustomer = [
 
       const customer = await Customer.findOne({ email }).select("+password");
       if (!customer) {
-        return res.status(401).json({ error: "Invalid credentials" });
+        return res.status(401).json({ error: "Incorrect Email! Please try again." });
       }
 
       const isMatch = await bcrypt.compare(password, customer.password);
       if (!isMatch) {
-        return res.status(401).json({ error: "Invalid credentials" });
+        return res.status(401).json({ error: "Incorrect Password! Please try again." });
       }
 
       const token = jwt.sign(
