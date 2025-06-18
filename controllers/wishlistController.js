@@ -15,7 +15,7 @@ exports.createList = async (req, res) => {
 
     const existing = await Wishlist.findOne({ customerId, title });
     if (existing) {
-      return res.status(409).json({ message: "A list with this title already exists" });
+      return res.status(409).json({ message: "A wishlist with this title already exists" });
     }
 
     const wishlist = new Wishlist({
@@ -129,22 +129,36 @@ exports.getWishlistItems = async (req, res) => {
 
 exports.removeFromWishlist = async (req, res) => {
   try {
-    const { customer, params } = req;
+    const { customer, params, body } = req;
     const { _id: customerId } = customer;
-    const { id } = params;
+    const { id: wishlistId } = params;
+    const { productId } = body;
+   
+    const productIdsToRemove = Array.isArray(productId) ? productId : [productId];
 
-    const deleted = await Wishlist.findOneAndDelete({
-      _id: id,
-      user: customerId,
+    const wishlist = await Wishlist.findOne({
+      _id: wishlistId,
+      customerId: customerId,
     });
 
-    if (!deleted) {
-      return res.status(404).json({ error: "Item not found in wishlist" });
+    if (!wishlist) {
+      return res.status(404).json({ error: "Wishlist not found" });
     }
 
-    res.status(200).json({ message: "Removed from wishlist" });
+    wishlist.productIds = wishlist.productIds.filter(
+      pid => !productIdsToRemove.includes(pid.toString())
+    );
+
+    if (wishlist.productIds.length === 0) {
+      await Wishlist.deleteOne({ _id: wishlistId });
+      return res.status(200).json({ message: "Wishlist deleted as it became empty" });
+    } else {
+      await wishlist.save();
+      return res.status(200).json({ message: "Product(s) removed from wishlist" });
+    }
   } catch (error) {
     console.error("Remove wishlist item error:", error);
     res.status(500).json({ error: "Server error" });
   }
 };
+

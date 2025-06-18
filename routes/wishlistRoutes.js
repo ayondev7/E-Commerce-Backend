@@ -7,6 +7,6 @@ router.post('/add-to-list', auth, wishlistController.addToList);
 router.post('/create-list', auth, wishlistController.createList);
 router.get('/get-all-lists', auth, wishlistController.getAllLists);
 router.get('/get-all', auth, wishlistController.getWishlistItems);
-router.delete('/:id', auth, wishlistController.removeFromWishlist);
+router.delete('/delete-wishlist-item/:id', auth, wishlistController.removeFromWishlist);
 
 module.exports = router;
