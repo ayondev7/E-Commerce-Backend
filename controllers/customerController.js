@@ -69,14 +69,21 @@ exports.loginCustomer = [
   async (req, res) => {
     try {
       const errors = validationResult(req);
-      if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
 
       const { email, password } = req.body;
+
       const customer = await Customer.findOne({ email }).select("+password");
-      if (!customer) return res.status(401).json({ error: "Invalid credentials" });
+      if (!customer) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
 
       const isMatch = await bcrypt.compare(password, customer.password);
-      if (!isMatch) return res.status(401).json({ error: "Invalid credentials" });
+      if (!isMatch) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
 
       const token = jwt.sign(
         { customerId: customer._id },
@@ -84,22 +91,22 @@ exports.loginCustomer = [
         { expiresIn: "3h" }
       );
 
-      const { password: _, customerImage, ...customerData } = customer.toObject();
+      const customerObj = customer.toObject();
+      delete customerObj.password;
+      delete customerObj.customerImage;
 
-      res.status(200).json({
-        token,
-        customer: {
-          ...customerData,
-          customerImage: customerImage ? customerImage.toString("base64") : null
-        }
+      return res.status(200).json({
+        accessToken: token,
+        customer: customerObj,
       });
     } catch (error) {
-      res.status(500).json({ error: error.message });
+      console.error(error);
+      return res.status(500).json({ error: error.message });
     }
   }
 ];
 
-exports.getCustomerProfile = async (req, res) => {
+exports.getCustomerProfileInfo = async (req, res) => {
   try {
     const customer = await Customer.findById(req.customer._id)
       .select('-password -__v')
@@ -122,6 +129,46 @@ exports.getCustomerProfile = async (req, res) => {
     return res.status(500).json({ 
       error: 'Failed to fetch profile',
       details: error.message 
+    });
+  }
+};
+
+exports.getCustomerProfile = async (req, res) => {
+  try {
+    const { customer } = req;
+
+    if (!customer || !customer._id) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized: Customer not found in request",
+      });
+    }
+
+    const foundCustomer = await Customer.findById(customer._id);
+
+    if (!foundCustomer) {
+      return res.status(404).json({
+        success: false,
+        message: "Customer not found",
+      });
+    }
+
+    const { password, customerImage, firstName, lastName, ...rest } = foundCustomer.toObject();
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        ...rest,
+        name: `${firstName} ${lastName}`,
+        image: customerImage ? customerImage.toString('base64') : null,
+      },
+    });
+
+  } catch (error) {
+    console.error("Error fetching customer profile:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong while fetching customer profile",
     });
   }
 };

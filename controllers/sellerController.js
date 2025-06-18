@@ -97,14 +97,9 @@ exports.loginSeller = [
         { expiresIn: "3h" }
       );
 
-      const responseSellerData = {
-        ...sellerData,
-        sellerImage: sellerImage ? sellerImage.toString("base64") : null,
-      };
-
       res.status(200).json({
         accessToken,
-        seller: responseSellerData,
+        seller: sellerData,
       });
     } catch (error) {
       res.status(500).json({ error: "Server error" });
@@ -127,5 +122,44 @@ exports.getAllSellers = async (req, res) => {
     res.status(200).json(sellersWithImages);
   } catch (error) {
     res.status(500).json({ error: "Server error" });
+  }
+};
+
+exports.getSellerProfile = async (req, res) => {
+  try {
+    const { seller } = req;
+
+    if (!seller || !seller._id) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized: Seller not found in request",
+      });
+    }
+
+    const foundSeller = await Seller.findById(seller._id);
+
+    if (!foundSeller) {
+      return res.status(404).json({
+        success: false,
+        message: "Seller not found",
+      });
+    }
+
+    const { password, sellerImage, ...rest } = foundSeller.toObject();
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        ...rest,
+        image: sellerImage ? sellerImage.toString('base64') : null,
+      },
+    });
+
+  } catch (error) {
+    console.error("Error fetching seller profile:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong while fetching seller profile",
+    });
   }
 };

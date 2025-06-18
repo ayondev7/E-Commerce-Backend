@@ -32,8 +32,9 @@ router.get('/get-all-customers', auth, customerController.getAllCustomers);
 
 router.get('/get-overview-stats', auth, customerController.getCustomerStats);
 
+router.get('/get-profile', auth, customerController.getCustomerProfile);
 
-router.get('/profile', auth, customerController.getCustomerProfile);
+router.get('/profile', auth, customerController.getCustomerProfileInfo);
 
 
 router.patch('/update', auth, upload.single('customerImage'), customerController.updateCustomer);
