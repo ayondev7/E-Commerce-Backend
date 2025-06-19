@@ -210,15 +210,24 @@ exports.getAllOrders = async (req, res) => {
       .sort({ createdAt: -1 })
       .lean();
 
-    const transformedOrders = orders.map((order, index) => {
-      const orderNumber = String(index + 1).padStart(3, "0");
-      return {
-        ...order,
-        orderId: `ORD-${orderNumber}`,
-        status: order.orderStatus,
-        orderStatus: undefined,
-      };
-    });
+    const transformedOrders = await Promise.all(
+      orders.map(async (order, index) => {
+        const orderNumber = String(index + 1).padStart(3, "0");
+
+        let productTitle = "Unknown Product";
+        if (order.productId) {
+          const product = await Product.findById(order.productId).select("title").lean();
+          if (product) productTitle = product.title;
+        }
+
+        return {
+          ...order,
+          orderId: `ORD-${orderNumber}`,
+          status: order.orderStatus,
+          productTitle,
+        };
+      })
+    );
 
     res.status(200).json({
       success: true,
@@ -234,6 +243,7 @@ exports.getAllOrders = async (req, res) => {
     });
   }
 };
+
 
 exports.getSellerOrders = async (req, res) => {
   try {
