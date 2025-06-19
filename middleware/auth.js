@@ -22,7 +22,6 @@ const auth = async (req, res, next) => {
     }
 
     if (decoded.customerId) {
-      console.log("decoded.customerId", decoded.customerId);
       const customer = await Customer.findById(decoded.customerId).select("-password");
       if (customer) {
         req.customer = customer;

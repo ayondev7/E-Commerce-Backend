@@ -77,8 +77,6 @@ exports.deleteAddress = async (req, res) => {
 exports.setDefaultAddress = async (req, res) => {
   try {
     const addressId = req.params.id;
-
-    // Unset all defaults first
     await Address.updateMany(
       { customerId: req.customer._id },
       { isDefault: false }

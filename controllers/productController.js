@@ -69,7 +69,6 @@ exports.createProduct = [
     }),
 
   async (req, res) => {
-    console.log("Request body:", req.body);
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
@@ -444,7 +443,7 @@ exports.updateProduct = [
       const { id } = req.params;
       const updateData = { ...req.body };
 
-      // Find the product first
+      
       const existingProduct = await Product.findOne({
         _id: id,
         sellerId: req.sellerId,
@@ -454,7 +453,7 @@ exports.updateProduct = [
         return res.status(404).json({ error: "Product not found" });
       }
 
-      // Process new images if provided
+      
       if (req.files && req.files.length > 0) {
         if (req.files.length > 4) {
           return res.status(400).json({ error: "Maximum 4 images allowed" });
@@ -473,7 +472,7 @@ exports.updateProduct = [
         updateData.productImages = productImages;
       }
 
-      // Parse JSON strings if they come as strings from form data
+     
       if (updateData.conditions && typeof updateData.conditions === "string") {
         updateData.conditions = JSON.parse(updateData.conditions);
       }
@@ -490,11 +489,11 @@ exports.updateProduct = [
         updateData.tags = JSON.parse(updateData.tags);
       }
 
-      // Convert string booleans
+     
       if (updateData.negotiable === "true") updateData.negotiable = true;
       if (updateData.negotiable === "false") updateData.negotiable = false;
 
-      // Convert string numbers
+      
       if (updateData.price) updateData.price = Number(updateData.price);
       if (updateData.salePrice)
         updateData.salePrice = Number(updateData.salePrice);
