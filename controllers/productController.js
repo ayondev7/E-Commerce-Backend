@@ -340,196 +340,6 @@ exports.getSingleProduct = async (req, res) => {
   }
 };
 
-
-exports.updateProduct = [
-  body("title")
-    .optional()
-    .trim()
-    .notEmpty()
-    .withMessage("Title cannot be empty"),
-  body("description")
-    .optional()
-    .trim()
-    .notEmpty()
-    .withMessage("Description cannot be empty"),
-  body("category")
-    .optional()
-    .trim()
-    .notEmpty()
-    .withMessage("Category cannot be empty"),
-  body("brand")
-    .optional()
-    .trim()
-    .notEmpty()
-    .withMessage("Brand cannot be empty"),
-  body("model")
-    .optional()
-    .trim()
-    .notEmpty()
-    .withMessage("Model cannot be empty"),
-  body("storage")
-    .optional()
-    .trim()
-    .notEmpty()
-    .withMessage("Storage cannot be empty"),
-  body("colour")
-    .optional()
-    .trim()
-    .notEmpty()
-    .withMessage("Colour cannot be empty"),
-  body("ram").optional().trim().notEmpty().withMessage("RAM cannot be empty"),
-  body("conditions")
-    .optional()
-    .custom((value) => {
-      if (value && (!Array.isArray(value) || value.length === 0)) {
-        throw new Error("Conditions must be a non-empty array");
-      }
-      return true;
-    }),
-  body("features")
-    .optional()
-    .custom((value) => {
-      if (value && (!Array.isArray(value) || value.length === 0)) {
-        throw new Error("Features must be a non-empty array");
-      }
-      return true;
-    }),
-  body("specifications")
-    .optional()
-    .custom((value) => {
-      if (value && (!Array.isArray(value) || value.length === 0)) {
-        throw new Error("Specifications must be a non-empty array");
-      }
-      if (value) {
-        for (let spec of value) {
-          if (!spec.label || !spec.value) {
-            throw new Error(
-              "Each specification must have both label and value"
-            );
-          }
-        }
-      }
-      return true;
-    }),
-  body("price").optional().isNumeric().withMessage("Price must be a number"),
-  body("salePrice")
-    .optional()
-    .isNumeric()
-    .withMessage("Sale price must be a number"),
-  body("quantity")
-    .optional()
-    .isInt({ min: 0 })
-    .withMessage("Quantity must be a non-negative integer"),
-  body("sku")
-    .optional()
-    .trim()
-    .notEmpty()
-    .withMessage("SKU cannot be empty if provided"),
-  body("negotiable")
-    .optional()
-    .isBoolean()
-    .withMessage("Negotiable must be a boolean"),
-  body("tags").optional().isArray().withMessage("Tags must be an array"),
-  body("seoTitle").optional().trim(),
-  body("seoDescription").optional().trim(),
-
-  async (req, res) => {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
-      }
-
-      const { id } = req.params;
-      const updateData = { ...req.body };
-
-      
-      const existingProduct = await Product.findOne({
-        _id: id,
-        sellerId: req.sellerId,
-      });
-
-      if (!existingProduct) {
-        return res.status(404).json({ error: "Product not found" });
-      }
-
-      
-      if (req.files && req.files.length > 0) {
-        if (req.files.length > 4) {
-          return res.status(400).json({ error: "Maximum 4 images allowed" });
-        }
-
-        let productImages = [];
-        for (let file of req.files) {
-          const processedImage = await sharp(file.buffer)
-            .webp({
-              lossless: true,
-              effort: 4,
-            })
-            .toBuffer();
-          productImages.push(processedImage);
-        }
-        updateData.productImages = productImages;
-      }
-
-     
-      if (updateData.conditions && typeof updateData.conditions === "string") {
-        updateData.conditions = JSON.parse(updateData.conditions);
-      }
-      if (updateData.features && typeof updateData.features === "string") {
-        updateData.features = JSON.parse(updateData.features);
-      }
-      if (
-        updateData.specifications &&
-        typeof updateData.specifications === "string"
-      ) {
-        updateData.specifications = JSON.parse(updateData.specifications);
-      }
-      if (updateData.tags && typeof updateData.tags === "string") {
-        updateData.tags = JSON.parse(updateData.tags);
-      }
-
-     
-      if (updateData.negotiable === "true") updateData.negotiable = true;
-      if (updateData.negotiable === "false") updateData.negotiable = false;
-
-      
-      if (updateData.price) updateData.price = Number(updateData.price);
-      if (updateData.salePrice)
-        updateData.salePrice = Number(updateData.salePrice);
-      if (updateData.quantity)
-        updateData.quantity = Number(updateData.quantity);
-
-      const updatedProduct = await Product.findByIdAndUpdate(id, updateData, {
-        new: true,
-        runValidators: true,
-      }).populate("sellerId", "name email");
-
-      const productObj = updatedProduct.toObject();
-      const productWithImages = {
-        ...productObj,
-        productImages: productObj.productImages.map((img) =>
-          img.toString("base64")
-        ),
-      };
-
-      res.status(200).json({
-        message: "Product updated successfully",
-        product: productWithImages,
-      });
-    } catch (error) {
-      if (error.code === 11000) {
-        return res.status(400).json({ error: "SKU already exists" });
-      }
-      if (error.name === "ValidationError") {
-        return res.status(400).json({ error: error.message });
-      }
-      console.error("Product update error:", error);
-      res.status(500).json({ error: "Server error" });
-    }
-  },
-];
-
 exports.deleteProduct = async (req, res) => {
   try {
     const { seller } = req;
@@ -648,3 +458,61 @@ exports.getProductStats = async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 };
+
+exports.updateProduct = async (req, res) => {
+  try {
+    const { productId } = req.body;
+
+    if (!productId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Product ID is required',
+      });
+    }
+
+    const existingProduct = await Product.findById(productId);
+    if (!existingProduct) {
+      return res.status(404).json({
+        success: false,
+        message: 'Product not found',
+      });
+    }
+
+    const updateData = { ...req.body };
+
+    delete updateData.productId;
+
+    delete updateData.productImages;
+
+    if (updateData.price !== undefined) {
+      updateData.price = parseFloat(updateData.price);
+    }
+
+    if (updateData.salePrice !== undefined) {
+      updateData.salePrice = parseFloat(updateData.salePrice);
+    }
+
+    if (updateData.quantity !== undefined) {
+      updateData.quantity = parseInt(updateData.quantity);
+    }
+
+    const updatedProduct = await Product.findByIdAndUpdate(
+      productId,
+      { $set: updateData },
+      { new: true, runValidators: true }
+    );
+
+    res.status(200).json({
+      success: true,
+      message: 'Product updated successfully',
+      product: updatedProduct,
+    });
+  } catch (error) {
+    console.error('Update Product Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'An error occurred while updating the product',
+    });
+  }
+};
+

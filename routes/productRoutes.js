@@ -50,8 +50,8 @@ router.get(
   productController.getSingleProduct
 );
 
-router.put(
-  '/:id',
+router.patch(
+  '/update-product',
   auth,
   upload.array('productImages', 4),
   productController.updateProduct
