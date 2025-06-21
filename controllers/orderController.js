@@ -4,6 +4,11 @@ const Order = require("../models/Order");
 const mongoose = require("mongoose");
 const Cart = require("../models/Cart");
 const Product = require("../models/Product");
+const RecentActivity = require("../models/RecentActivity");
+const { customAlphabet } = require('nanoid');
+const orderIdNanoid = customAlphabet('0123456789', 5);
+const txnIdNanoid = customAlphabet('0123456789', 7);
+
 exports.AddOrder = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -123,6 +128,20 @@ exports.AddOrder = async (req, res) => {
         });
       }
 
+      let orderId;
+      let orderExists = true;
+      while (orderExists) {
+        orderId = `ORD-${orderIdNanoid()}`;
+        orderExists = await Order.exists({ orderId }).session(session);
+      }
+
+      let transactionId;
+      let txnExists = true;
+      while (txnExists) {
+        transactionId = `TXN-${txnIdNanoid()}`;
+        txnExists = await Order.exists({ transactionId }).session(session);
+      }
+
       const order = new Order({
         customerId,
         productId,
@@ -132,10 +151,19 @@ exports.AddOrder = async (req, res) => {
         shippingInfoId,
         paymentStatus: "pending",
         orderStatus: "pending",
+        orderId,
+        transactionId,
       });
 
       const savedOrder = await order.save({ session });
       createdOrders.push(savedOrder);
+
+      const activity = new RecentActivity({
+        customerId,
+        orderId: savedOrder._id,
+        activityStatus: `Your order #${savedOrder.orderId} has been placed`,
+      });
+      await activity.save({ session });
     }
 
     const orderedProductIds = products.map((p) => p.productId);
@@ -185,8 +213,6 @@ exports.AddOrder = async (req, res) => {
     await session.abortTransaction();
     session.endSession();
 
-    console.error("Error creating order:", error);
-
     return res.status(500).json({
       success: false,
       message: "Failed to create order",
@@ -194,6 +220,7 @@ exports.AddOrder = async (req, res) => {
     });
   }
 };
+
 
 exports.getAllOrders = async (req, res) => {
   try {
@@ -212,8 +239,6 @@ exports.getAllOrders = async (req, res) => {
 
     const transformedOrders = await Promise.all(
       orders.map(async (order, index) => {
-        const orderNumber = String(index + 1).padStart(3, "0");
-
         let productTitle = "Unknown Product";
         if (order.productId) {
           const product = await Product.findById(order.productId).select("title").lean();
@@ -222,7 +247,6 @@ exports.getAllOrders = async (req, res) => {
 
         return {
           ...order,
-          orderId: `ORD-${orderNumber}`,
           status: order.orderStatus,
           productTitle,
         };
@@ -270,11 +294,8 @@ exports.getSellerOrders = async (req, res) => {
       .lean();
 
     const transformedOrders = sellerOrders.map((order, index) => {
-      const orderNumber = String(index + 1).padStart(3, "0");
-
       return {
         _id: order._id,
-        orderId: `ORD-${orderNumber}`,
         status: order.orderStatus,
         createdAt: order.createdAt,
         updatedAt: order.updatedAt,
@@ -345,6 +366,7 @@ exports.getOrderById = async (req, res) => {
       paymentMethod: order.paymentMethod,
       createdAt: order.createdAt,
       updatedAt: order.updatedAt,
+      orderId: order.orderId,
 
       product: {
         _id: product._id,
@@ -428,13 +450,18 @@ exports.updateOrderStatus = async (req, res) => {
     order.orderStatus = orderStatus;
     await order.save();
 
+    await RecentActivity.create({
+      customerId: order.customerId,
+      orderId: order._id,
+      activityStatus: `Your order #${order.orderId} has been ${orderStatus}`,
+    });
+
     res.status(200).json({ message: "Order status updated successfully.", order });
   } catch (error) {
     console.error("Error updating order status:", error);
     res.status(500).json({ message: "Internal server error." });
   }
 };
-
 
 exports.getOrderStatusCounts = async (req, res) => {
   try {
@@ -482,6 +509,34 @@ exports.getOrderStatusCounts = async (req, res) => {
   } catch (error) {
     console.error('Error getting order status counts:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+exports.getAllPayments = async (req, res) => {
+  try {
+    const { customer } = req;
+    const customerId = customer?._id;
+
+    if (!customerId) {
+      return res.status(400).json({ message: "Customer ID is required" });
+    }
+
+    const orders = await Order.find({ customerId }).lean();
+
+    const payments = await Promise.all(
+      orders.map(async (order) => {
+        const product = await Product.findById(order.productId).select('title');
+        return {
+          ...order,
+          productTitle: product ? product.title : null,
+        };
+      })
+    );
+
+    res.status(200).json({ success: true, payments });
+  } catch (error) {
+    console.error("Error fetching payments:", error);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 };
 

@@ -251,3 +251,21 @@ exports.getCustomerStats = async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 };
+
+exports.getActivitiesByCustomer = async (req, res) => {
+  try {
+    const { customer } = req;
+    const customerId = customer?._id;
+
+    if (!customerId) {
+      return res.status(400).json({ message: "Customer ID is required" });
+    }
+
+    const activities = await RecentActivity.find({ customerId }).sort({ createdAt: -1 });
+
+    res.status(200).json({ success: true, activities });
+  } catch (error) {
+    console.error("Error fetching recent activities:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};

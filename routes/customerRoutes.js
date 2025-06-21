@@ -27,6 +27,7 @@ router.post('/register', upload.single('customerImage'), customerController.crea
 
 router.post('/login', customerController.loginCustomer);
 
+router.get('/get-recent-activity', auth, customerController.getActivitiesByCustomer);
 
 router.get('/get-all-customers', auth, customerController.getAllCustomers);
 

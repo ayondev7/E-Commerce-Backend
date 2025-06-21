@@ -2,6 +2,7 @@ const Wishlist = require("../models/Wishlist");
 const mongoose = require("mongoose");
 const Product = require("../models/Product");
 const Seller = require("../models/Seller");
+const recentActivity = require("../models/RecentActivity");
 
 exports.createList = async (req, res) => {
   try {
@@ -64,6 +65,15 @@ exports.addToList = async (req, res) => {
     wishlist.productIds.push(productId);
     await wishlist.save();
 
+    const product = await Product.findById(productId).select('title');
+    const productTitle = product ? product.title : 'the product';
+
+    await RecentActivity.create({
+      customerId,
+      wishlistId,
+      activityStatus: `You added '${productTitle}' to your wishlist`,
+    });
+
     res.status(200).json({ message: "Product added to wishlist", wishlist });
   } catch (error) {
     console.error("Add to list error:", error);
@@ -125,15 +135,13 @@ exports.getWishlistItems = async (req, res) => {
   }
 };
 
-
-
 exports.removeFromWishlist = async (req, res) => {
   try {
     const { customer, params, body } = req;
     const { _id: customerId } = customer;
     const { id: wishlistId } = params;
     const { productId } = body;
-   
+
     const productIdsToRemove = Array.isArray(productId) ? productId : [productId];
 
     const wishlist = await Wishlist.findOne({
@@ -148,6 +156,17 @@ exports.removeFromWishlist = async (req, res) => {
     wishlist.productIds = wishlist.productIds.filter(
       pid => !productIdsToRemove.includes(pid.toString())
     );
+
+    for (const pid of productIdsToRemove) {
+      const product = await Product.findById(pid).select('title');
+      const productTitle = product ? product.title : 'the product';
+
+      await RecentActivity.create({
+        customerId,
+        wishlistId,
+        activityStatus: `You removed '${productTitle}' from your wishlist`,
+      });
+    }
 
     if (wishlist.productIds.length === 0) {
       await Wishlist.deleteOne({ _id: wishlistId });

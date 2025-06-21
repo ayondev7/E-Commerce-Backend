@@ -11,6 +11,8 @@ router.get('/get-seller-orders', auth, orderController.getSellerOrders);
 
 router.get('/get-seller-order/:id', auth, orderController.getOrderById);
 
+router.get('/get-payments', auth, orderController.getPayments);
+
 router.patch('/update-status/:orderId', auth, orderController.updateOrderStatus);
 
 router.get('/get-order-status-counts', auth, orderController.getOrderStatusCounts);
