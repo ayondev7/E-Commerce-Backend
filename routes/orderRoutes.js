@@ -11,7 +11,7 @@ router.get('/get-seller-orders', auth, orderController.getSellerOrders);
 
 router.get('/get-seller-order/:id', auth, orderController.getOrderById);
 
-router.get('/get-payments', auth, orderController.getPayments);
+router.get('/get-payments', auth, orderController.getAllPayments);
 
 router.patch('/update-status/:orderId', auth, orderController.updateOrderStatus);
 
