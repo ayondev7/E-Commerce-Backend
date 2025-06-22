@@ -5,6 +5,7 @@ const jwt = require("jsonwebtoken");
 const sharp = require("sharp");
 const Order = require("../models/Order");
 const Wishlist = require("../models/Wishlist");
+const RecentActivity = require("../models/RecentActivity");
 
 const buildCustomerPayload = async ({ firstName, lastName, email, password, phone, bio }, file) => {
   const customerImage = file

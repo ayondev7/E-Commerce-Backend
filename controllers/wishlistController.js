@@ -2,7 +2,7 @@ const Wishlist = require("../models/Wishlist");
 const mongoose = require("mongoose");
 const Product = require("../models/Product");
 const Seller = require("../models/Seller");
-const recentActivity = require("../models/RecentActivity");
+const RecentActivity = require("../models/RecentActivity");
 
 exports.createList = async (req, res) => {
   try {
@@ -71,6 +71,7 @@ exports.addToList = async (req, res) => {
     await RecentActivity.create({
       customerId,
       wishlistId,
+      activityType: "added to wishlist",
       activityStatus: `You added '${productTitle}' to your wishlist`,
     });
 
@@ -164,6 +165,7 @@ exports.removeFromWishlist = async (req, res) => {
       await RecentActivity.create({
         customerId,
         wishlistId,
+        activityType: "removed from wishlist",
         activityStatus: `You removed '${productTitle}' from your wishlist`,
       });
     }

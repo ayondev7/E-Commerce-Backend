@@ -17,6 +17,11 @@ const recentActivitySchema = new mongoose.Schema(
       ref: 'Order',
       required: false,
     },
+    activityType: {
+      type: String,
+      required: true,
+      trim: true,
+    },
     activityStatus: {
       type: String,
       required: true,

@@ -161,6 +161,7 @@ exports.AddOrder = async (req, res) => {
       const activity = new RecentActivity({
         customerId,
         orderId: savedOrder._id,
+        activityType: "order added",
         activityStatus: `Your order #${savedOrder.orderId} has been placed`,
       });
       await activity.save({ session });
@@ -453,6 +454,7 @@ exports.updateOrderStatus = async (req, res) => {
     await RecentActivity.create({
       customerId: order.customerId,
       orderId: order._id,
+      activityType: `order ${orderStatus}`,
       activityStatus: `Your order #${order.orderId} has been ${orderStatus}`,
     });
 
