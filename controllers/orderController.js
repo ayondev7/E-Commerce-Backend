@@ -5,9 +5,29 @@ const mongoose = require("mongoose");
 const Cart = require("../models/Cart");
 const Product = require("../models/Product");
 const RecentActivity = require("../models/RecentActivity");
-const { customAlphabet } = require('nanoid');
-const orderIdNanoid = customAlphabet('0123456789', 5);
-const txnIdNanoid = customAlphabet('0123456789', 7);
+const { customAlphabet } = require("nanoid");
+const orderIdNanoid = customAlphabet("0123456789", 5);
+const txnIdNanoid = customAlphabet("0123456789", 7);
+const SSLCommerzPayment = require("sslcommerz-lts");
+const store_id = process.env.SSLCOMMERZ_STORE_ID;
+const store_passwd = process.env.SSLCOMMERZ_STORE_PASSWORD;
+const is_live = process.env.SSLCOMMERZ_IS_LIVE === "true";
+
+const tempOrderSchema = new mongoose.Schema({
+  customerId: { type: mongoose.Schema.Types.ObjectId, required: true },
+  orders: [{ type: mongoose.Schema.Types.ObjectId, ref: "Order" }],
+  shippingInfoId: { type: mongoose.Schema.Types.ObjectId, required: true },
+  addressIds: {
+    primary: mongoose.Schema.Types.ObjectId,
+    optional: mongoose.Schema.Types.ObjectId,
+  },
+  checkoutPayload: mongoose.Schema.Types.Mixed,
+  products: [mongoose.Schema.Types.Mixed],
+  expiresAt: { type: Date, default: Date.now, expires: 3600 },
+});
+
+const TempOrder =
+  mongoose.models.TempOrder || mongoose.model("TempOrder", tempOrderSchema);
 
 exports.AddOrder = async (req, res) => {
   const session = await mongoose.startSession();
@@ -36,10 +56,9 @@ exports.AddOrder = async (req, res) => {
     if (!customerId) {
       await session.abortTransaction();
       session.endSession();
-      return res.status(400).json({
-        success: false,
-        message: "Customer ID is required",
-      });
+      return res
+        .status(400)
+        .json({ success: false, message: "Customer ID is required" });
     }
 
     if (
@@ -58,6 +77,7 @@ exports.AddOrder = async (req, res) => {
     let shippingInfoId;
     let primaryAddressId = addressId;
     let optionalAddressId = null;
+    let addressForGateway;
 
     if (!addressId) {
       if (!addressLine1 || !city || !zipCode || !country) {
@@ -84,6 +104,14 @@ exports.AddOrder = async (req, res) => {
       const savedPrimaryAddress = await primaryAddress.save({ session });
       primaryAddressId = savedPrimaryAddress._id;
 
+      addressForGateway = {
+        addressLine: savedPrimaryAddress.addressLine,
+        city: savedPrimaryAddress.city,
+        zipCode: savedPrimaryAddress.zipCode,
+        country: savedPrimaryAddress.country,
+        state: savedPrimaryAddress.state,
+      };
+
       if (addressLine2 && addressLine2.trim() !== "") {
         const optionalAddress = new Address({
           customerId,
@@ -99,6 +127,22 @@ exports.AddOrder = async (req, res) => {
         const savedOptionalAddress = await optionalAddress.save({ session });
         optionalAddressId = savedOptionalAddress._id;
       }
+    } else {
+      const foundAddress = await Address.findById(addressId).session(session);
+      if (!foundAddress) {
+        await session.abortTransaction();
+        session.endSession();
+        return res
+          .status(404)
+          .json({ success: false, message: "Address not found" });
+      }
+      addressForGateway = {
+        addressLine: foundAddress.addressLine,
+        city: foundAddress.city,
+        zipCode: foundAddress.zipCode,
+        country: foundAddress.country,
+        state: foundAddress.state,
+      };
     }
 
     const shippingInfo = new ShippingInfo({
@@ -128,15 +172,15 @@ exports.AddOrder = async (req, res) => {
         });
       }
 
-      let orderId;
-      let orderExists = true;
+      let orderId,
+        orderExists = true;
       while (orderExists) {
         orderId = `ORD-${orderIdNanoid()}`;
         orderExists = await Order.exists({ orderId }).session(session);
       }
 
-      let transactionId;
-      let txnExists = true;
+      let transactionId,
+        txnExists = true;
       while (txnExists) {
         transactionId = `TXN-${txnIdNanoid()}`;
         txnExists = await Order.exists({ transactionId }).session(session);
@@ -164,56 +208,130 @@ exports.AddOrder = async (req, res) => {
         activityType: "order added",
         activityStatus: `Your order #${savedOrder.orderId} has been placed`,
       });
+
       await activity.save({ session });
     }
 
-    const orderedProductIds = products.map((p) => p.productId);
+    if (paymentMethod === "cod") {
+      const orderedProductIds = products.map((p) => p.productId);
+      const carts = await Cart.find({ customerId }).session(session);
 
-    const carts = await Cart.find({ customerId }).session(session);
+      for (const cart of carts) {
+        const productIdsArray = Array.isArray(cart.productIds)
+          ? cart.productIds.map((id) => id.toString())
+          : [cart.productIds.toString()];
 
-    for (const cart of carts) {
-      const productIdsArray = Array.isArray(cart.productIds)
-        ? cart.productIds.map((id) => id.toString())
-        : [cart.productIds.toString()];
+        const remaining = productIdsArray.filter(
+          (id) => !orderedProductIds.includes(id)
+        );
 
-      const remaining = productIdsArray.filter(
-        (id) => !orderedProductIds.includes(id)
-      );
-
-      if (remaining.length === 0) {
-        await Cart.deleteOne({ _id: cart._id }).session(session);
-      } else {
-        cart.productIds = remaining;
-        await cart.save({ session });
+        if (remaining.length === 0) {
+          await Cart.deleteOne({ _id: cart._id }).session(session);
+        } else {
+          cart.productIds = remaining;
+          await cart.save({ session });
+        }
       }
-    }
 
-    await session.commitTransaction();
-    session.endSession();
+      await session.commitTransaction();
+      session.endSession();
 
-    return res.status(201).json({
-      success: true,
-      message: "Orders created successfully",
-      data: {
-        orders: createdOrders,
-        shippingInfo: savedShippingInfo,
-        addresses: {
+      return res.status(201).json({
+        success: true,
+        message: "Orders created successfully",
+        data: {
+          orders: createdOrders,
+          shippingInfo: savedShippingInfo,
+          addresses: {
+            primary: primaryAddressId,
+            optional: optionalAddressId,
+          },
+          orderSummary: {
+            totalOrders: createdOrders.length,
+            subtotal: checkoutPayload.subtotal,
+            shipping: checkoutPayload.shipping || 0,
+            tax: checkoutPayload.tax || 0,
+            total: checkoutPayload.total,
+          },
+        },
+      });
+    } else if (paymentMethod === "gateway") {
+      const tempOrderData = {
+        customerId,
+        orders: createdOrders.map((order) => order._id),
+        shippingInfoId,
+        addressIds: {
           primary: primaryAddressId,
           optional: optionalAddressId,
         },
-        orderSummary: {
-          totalOrders: createdOrders.length,
-          subtotal: checkoutPayload.subtotal,
-          shipping: checkoutPayload.shipping || 0,
-          tax: checkoutPayload.tax || 0,
-          total: checkoutPayload.total,
-        },
-      },
-    });
-  } catch (error) {
-    await session.abortTransaction();
-    session.endSession();
+        checkoutPayload,
+        products: products,
+      };
 
+      const tempOrder = new TempOrder(tempOrderData);
+      const savedTempOrder = await tempOrder.save({ session });
+
+      const data = {
+        total_amount: checkoutPayload.total,
+        currency: "BDT",
+        tran_id: `temp_${savedTempOrder._id}`,
+        success_url: `${process.env.BACKEND_URL}/api/payment/success?tran_id=temp_${savedTempOrder._id}`,
+        fail_url: `${process.env.BACKEND_URL}/api/payment/fail?tran_id=temp_${savedTempOrder._id}`,
+        cancel_url: `${process.env.BACKEND_URL}/api/payment/cancel?tran_id=temp_${savedTempOrder._id}`,
+        ipn_url: `${process.env.BACKEND_URL}/api/payment/ipn`,
+        shipping_method: "Courier",
+        product_name: `Order for ${createdOrders.length} items`,
+        product_category: "Electronic",
+        product_profile: "general",
+        cus_name: fullName,
+        cus_email: email,
+        cus_add1: addressForGateway.addressLine,
+        cus_add2: addressLine2 || "",
+        cus_city: addressForGateway.city,
+        cus_state: addressForGateway.state,
+        cus_postcode: addressForGateway.zipCode,
+        cus_country: addressForGateway.country,
+        cus_phone: phoneNumber,
+        cus_fax: "",
+        ship_name: fullName,
+        ship_add1: addressForGateway.addressLine,
+        ship_add2: addressLine2 || "",
+        ship_city: addressForGateway.city,
+        ship_state: addressForGateway.state,
+        ship_postcode: addressForGateway.zipCode,
+        ship_country: addressForGateway.country,
+      };
+
+      await session.commitTransaction();
+      session.endSession();
+
+      const sslcz = new SSLCommerzPayment(store_id, store_passwd, is_live);
+      const apiResponse = await sslcz.init(data);
+
+      if (apiResponse.GatewayPageURL) {
+        return res.status(200).json({
+          success: true,
+          message: "Payment session created",
+          data: {
+            paymentUrl: apiResponse.GatewayPageURL,
+            sessionkey: apiResponse.sessionkey,
+          },
+        });
+      } else {
+        return res.status(400).json({
+          success: false,
+          message: "Failed to create payment session",
+          error: apiResponse,
+        });
+      }
+    }
+  } catch (error) {
+    try {
+      if (session.inTransaction()) {
+        await session.abortTransaction();
+      }
+    } catch (abortErr) {}
+    session.endSession();
     return res.status(500).json({
       success: false,
       message: "Failed to create order",
@@ -222,6 +340,133 @@ exports.AddOrder = async (req, res) => {
   }
 };
 
+exports.paymentSuccess = async (req, res) => {
+  const { tran_id } = req.query;
+  try {
+    if (!tran_id || !tran_id.startsWith("temp_")) {
+      return res.redirect(`${process.env.FRONTEND_URL}/payment/fail?tran_id=invalid`);
+    }
+
+    const tempOrderId = tran_id.replace("temp_", "");
+    const tempOrder = await TempOrder.findById(tempOrderId)
+      .populate("orders")
+      .populate("shippingInfoId");
+
+    if (!tempOrder) {
+      return res.redirect(`${process.env.FRONTEND_URL}/payment/fail?tran_id=${tran_id}`);
+    }
+    console.log("Proceeding with order completion");
+    
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      await Order.updateMany(
+        { _id: { $in: tempOrder.orders } },
+        { paymentStatus: "paid" },
+        { session }
+      );
+
+      const orderedProductIds = tempOrder.products.map((p) => p.productId);
+      const carts = await Cart.find({ customerId: tempOrder.customerId }).session(session);
+
+      for (const cart of carts) {
+        const productIdsArray = Array.isArray(cart.productIds)
+          ? cart.productIds.map((id) => id.toString())
+          : [cart.productIds.toString()];
+
+        const remaining = productIdsArray.filter(
+          (id) => !orderedProductIds.includes(id)
+        );
+
+        if (remaining.length === 0) {
+          await Cart.deleteOne({ _id: cart._id }).session(session);
+        } else {
+          cart.productIds = remaining;
+          await cart.save({ session });
+        }
+      }
+
+      await TempOrder.findByIdAndDelete(tempOrderId).session(session);
+      await session.commitTransaction();
+      session.endSession();
+
+      return res.redirect(`${process.env.FRONTEND_URL}/payment/success?tran_id=${tran_id}`);
+    } catch (error) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.redirect(`${process.env.FRONTEND_URL}/payment/fail?tran_id=${tran_id}`);
+    }
+  } catch (error) {
+    console.error("Payment success error:", error);
+    return res.redirect(`${process.env.FRONTEND_URL}/payment/fail?tran_id=${tran_id}`);
+  }
+};
+
+exports.paymentFail = async (req, res) => {
+  const { tran_id } = req.query;
+
+  try {
+    if (tran_id && tran_id.startsWith("temp_")) {
+      const tempOrderId = tran_id.replace("temp_", "");
+      const TempOrder = mongoose.model("TempOrder");
+      const tempOrder = await TempOrder.findById(tempOrderId).populate(
+        "orders"
+      );
+
+      if (tempOrder) {
+        const session = await mongoose.startSession();
+        session.startTransaction();
+
+        try {
+          await Order.deleteMany(
+            { _id: { $in: tempOrder.orders } },
+            { session }
+          );
+          await ShippingInfo.findByIdAndDelete(tempOrder.shippingInfoId, {
+            session,
+          });
+
+          if (
+            tempOrder.addressIds.primary &&
+            !tempOrder.addressIds.primary.toString().startsWith("existing_")
+          ) {
+            await Address.findByIdAndDelete(tempOrder.addressIds.primary, {
+              session,
+            });
+          }
+          if (tempOrder.addressIds.optional) {
+            await Address.findByIdAndDelete(tempOrder.addressIds.optional, {
+              session,
+            });
+          }
+
+          await TempOrder.findByIdAndDelete(tempOrderId, { session });
+
+          await session.commitTransaction();
+          session.endSession();
+        } catch (error) {
+          await session.abortTransaction();
+          session.endSession();
+        }
+      }
+    }
+
+    return res.redirect(
+      `${process.env.FRONTEND_URL}/payment/fail?tran_id=${tran_id || "unknown"}`
+    );
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to process payment failure",
+      error: error.message,
+    });
+  }
+};
+
+exports.paymentCancel = async (req, res) => {
+  return exports.paymentFail(req, res);
+};
 
 exports.getAllOrders = async (req, res) => {
   try {
@@ -242,7 +487,9 @@ exports.getAllOrders = async (req, res) => {
       orders.map(async (order, index) => {
         let productTitle = "Unknown Product";
         if (order.productId) {
-          const product = await Product.findById(order.productId).select("title").lean();
+          const product = await Product.findById(order.productId)
+            .select("title")
+            .lean();
           if (product) productTitle = product.title;
         }
 
@@ -268,7 +515,6 @@ exports.getAllOrders = async (req, res) => {
     });
   }
 };
-
 
 exports.getSellerOrders = async (req, res) => {
   try {
@@ -330,32 +576,33 @@ exports.getOrderById = async (req, res) => {
 
     const order = await Order.findOne({ _id: id })
       .populate({
-        path: 'productId',
+        path: "productId",
         match: { sellerId },
-        select: 'title price salePrice category brand model storage colour ram sku tags negotiable productImages quantity conditions',
+        select:
+          "title price salePrice category brand model storage colour ram sku tags negotiable productImages quantity conditions",
       })
       .populate({
-        path: 'shippingInfoId',
-        populate: [
-          { path: 'addressId' },
-          { path: 'optionalAddressId' }
-        ]
+        path: "shippingInfoId",
+        populate: [{ path: "addressId" }, { path: "optionalAddressId" }],
       });
 
     if (!order || !order.productId) {
-      return res.status(404).json({ message: 'Order not found or unauthorized' });
+      return res
+        .status(404)
+        .json({ message: "Order not found or unauthorized" });
     }
 
     const product = order.productId.toObject();
 
-    const stockStatus = product.quantity === 0
-      ? "out of stock"
-      : product.quantity <= 10
-      ? "low stock"
-      : "active";
+    const stockStatus =
+      product.quantity === 0
+        ? "out of stock"
+        : product.quantity <= 10
+        ? "low stock"
+        : "active";
 
     const firstImageBase64 = product.productImages?.[0]
-      ? product.productImages[0].toString('base64')
+      ? product.productImages[0].toString("base64")
       : null;
 
     const response = {
@@ -395,7 +642,7 @@ exports.getOrderById = async (req, res) => {
     res.json(response);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: "Server error" });
   }
 };
 
@@ -408,7 +655,9 @@ exports.updateOrderStatus = async (req, res) => {
     const customerId = req.customer?._id;
 
     if (!orderId || !orderStatus) {
-      return res.status(400).json({ message: "Order ID and orderStatus are required." });
+      return res
+        .status(400)
+        .json({ message: "Order ID and orderStatus are required." });
     }
 
     const order = await Order.findById(orderId);
@@ -423,11 +672,15 @@ exports.updateOrderStatus = async (req, res) => {
       });
 
       if (!product) {
-        return res.status(403).json({ message: "You are not authorized to update this order." });
+        return res
+          .status(403)
+          .json({ message: "You are not authorized to update this order." });
       }
     } else if (customerId) {
       if (String(order.customerId) !== String(customerId)) {
-        return res.status(403).json({ message: "You are not authorized to update this order." });
+        return res
+          .status(403)
+          .json({ message: "You are not authorized to update this order." });
       }
     } else {
       return res.status(401).json({ message: "Unauthorized request." });
@@ -458,7 +711,9 @@ exports.updateOrderStatus = async (req, res) => {
       activityStatus: `Your order #${order.orderId} has been ${orderStatus}`,
     });
 
-    res.status(200).json({ message: "Order status updated successfully.", order });
+    res
+      .status(200)
+      .json({ message: "Order status updated successfully.", order });
   } catch (error) {
     console.error("Error updating order status:", error);
     res.status(500).json({ message: "Internal server error." });
@@ -470,7 +725,7 @@ exports.getOrderStatusCounts = async (req, res) => {
     const { seller } = req;
     const { _id: sellerId } = seller;
 
-    const sellerProducts = await Product.find({ sellerId }, '_id');
+    const sellerProducts = await Product.find({ sellerId }, "_id");
     const productIds = sellerProducts.map((p) => p._id);
 
     if (productIds.length === 0) {
@@ -490,7 +745,7 @@ exports.getOrderStatusCounts = async (req, res) => {
       },
       {
         $group: {
-          _id: '$orderStatus',
+          _id: "$orderStatus",
           count: { $sum: 1 },
         },
       },
@@ -509,8 +764,8 @@ exports.getOrderStatusCounts = async (req, res) => {
 
     res.status(200).json(result);
   } catch (error) {
-    console.error('Error getting order status counts:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error("Error getting order status counts:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 };
 
@@ -527,7 +782,7 @@ exports.getAllPayments = async (req, res) => {
 
     const payments = await Promise.all(
       orders.map(async (order) => {
-        const product = await Product.findById(order.productId).select('title');
+        const product = await Product.findById(order.productId).select("title");
         return {
           ...order,
           productTitle: product ? product.title : null,
@@ -541,5 +796,3 @@ exports.getAllPayments = async (req, res) => {
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
-
-
