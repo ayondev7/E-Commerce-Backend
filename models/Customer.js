@@ -11,6 +11,11 @@ const customerSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
+  lastNotificationSeen: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'RecentActivity',
+    default: null
+  },
   email: {
     type: String,
     required: true,

@@ -24,10 +24,13 @@ const upload = multer({
 
 router.post('/register', upload.single('customerImage'), customerController.createCustomer);
 
-
 router.post('/login', customerController.loginCustomer);
 
+router.post('/mark-as-seen', auth, customerController.markNotificationsAsSeen);
+
 router.get('/get-recent-activity', auth, customerController.getActivitiesByCustomer);
+
+router.get('/get-notifications', auth, customerController.getAllNotifications);
 
 router.get('/get-all-customers', auth, customerController.getAllCustomers);
 
@@ -36,7 +39,6 @@ router.get('/get-overview-stats', auth, customerController.getCustomerStats);
 router.get('/get-profile', auth, customerController.getCustomerProfile);
 
 router.get('/profile', auth, customerController.getCustomerProfileInfo);
-
 
 router.patch('/update', auth, upload.single('customerImage'), customerController.updateCustomer);
 

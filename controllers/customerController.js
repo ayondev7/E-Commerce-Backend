@@ -20,6 +20,7 @@ const buildCustomerPayload = async ({ firstName, lastName, email, password, phon
     email,
     password: hashedPassword,
     phone,
+    lastNotificationSeen,
     bio,
     ...(customerImage && { customerImage })
   };
@@ -267,6 +268,56 @@ exports.getActivitiesByCustomer = async (req, res) => {
     res.status(200).json({ success: true, activities });
   } catch (error) {
     console.error("Error fetching recent activities:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+exports.getAllNotifications = async (req, res) => {
+  try {
+    const { customer } = req;
+    const customerId = customer?._id;
+
+    if (!customerId) {
+      return res.status(400).json({ message: "Customer ID is required" });
+    }
+
+    const customerDoc = await Customer.findById(customerId).select("lastNotificationSeen");
+    const lastSeenId = customerDoc?.lastNotificationSeen;
+
+    const activities = await RecentActivity.find({ customerId }).sort({ createdAt: -1 });
+
+    const processedActivities = activities.map((activity) => ({
+      ...activity.toObject(),
+      isNew: !lastSeenId || activity._id.toString() > lastSeenId.toString(),
+    }));
+
+    res.status(200).json({ success: true, notifications: processedActivities });
+  } catch (error) {
+    console.error("Error fetching all notifications:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+exports.markNotificationsAsSeen = async (req, res) => {
+  try {
+    const { customer } = req;
+    const { notificationId } = req.body;
+
+    if (!customer || !customer._id) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    if (!notificationId) {
+      return res.status(400).json({ success: false, message: "Notification ID is required" });
+    }
+
+    await Customer.findByIdAndUpdate(customer._id, {
+      lastNotificationSeen: notificationId,
+    });
+
+    res.status(200).json({ success: true, message: "Notifications marked as seen." });
+  } catch (error) {
+    console.error("Error updating lastNotificationSeen:", error);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
