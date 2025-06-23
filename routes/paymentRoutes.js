@@ -7,7 +7,6 @@ router.post('/fail', orderController.paymentFail);
 router.post('/cancel', orderController.paymentCancel);
 
 router.post('/ipn', (req, res) => {
-  console.log('IPN received:', req.body);
   res.status(200).send('OK');
 });
 

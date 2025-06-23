@@ -186,10 +186,12 @@ exports.AddOrder = async (req, res) => {
         txnExists = await Order.exists({ transactionId }).session(session);
       }
 
+      const quantityNum = parseInt(quantity);
+
       const order = new Order({
         customerId,
         productId,
-        quantity,
+        quantity: quantityNum,
         price,
         paymentMethod,
         shippingInfoId,
@@ -355,7 +357,6 @@ exports.paymentSuccess = async (req, res) => {
     if (!tempOrder) {
       return res.redirect(`${process.env.FRONTEND_URL}/payment/fail?tran_id=${tran_id}`);
     }
-    console.log("Proceeding with order completion");
     
     const session = await mongoose.startSession();
     session.startTransaction();
