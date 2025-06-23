@@ -546,6 +546,7 @@ exports.getSellerOrders = async (req, res) => {
         _id: order._id,
         status: order.orderStatus,
         createdAt: order.createdAt,
+        orderId: order.orderId,
         updatedAt: order.updatedAt,
         price: order.price,
         quantity: order.quantity,
