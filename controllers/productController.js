@@ -318,12 +318,12 @@ exports.getSingleProduct = async (req, res) => {
 
     const productObj = product.toObject();
 
-    
-    productObj.productImages = productObj.productImages.map((img) =>
+    productObj.productImageStrings = productObj.productImages.map((img) =>
       img ? img.toString('base64') : null
     );
 
-    
+    delete productObj.productImages;
+
     const quantity = productObj.quantity;
     if (quantity === 0) {
       productObj.stock = "out of stock";
@@ -459,11 +459,50 @@ exports.getProductStats = async (req, res) => {
   }
 };
 
+const crypto = require('crypto');
+const fs = require('fs').promises;
+const path = require('path');
+
+const generateImageHash = (buffer) => {
+  return crypto.createHash('md5').update(buffer).digest('hex');
+};
+
+async function fileToBuffer(file) {
+  if (file?.buffer) {
+    return file.buffer; // multer memoryStorage
+  } else if (file?.path) {
+    return await fs.readFile(file.path); // diskStorage fallback
+  } else {
+    throw new TypeError("Invalid file input: missing buffer or path");
+  }
+}
+
+const isValidBuffer = (buffer) => {
+  return Buffer.isBuffer(buffer) && buffer.length > 100;
+};
+
+async function cleanupFiles(files = []) {
+  if (!Array.isArray(files)) return;
+
+  await Promise.all(
+    files.map(async (file) => {
+      if (file?.path) {
+        try {
+          await fs.unlink(file.path);
+        } catch (err) {
+          console.error(`Failed to delete temp file ${file.path}:`, err.message);
+        }
+      }
+    })
+  );
+}
+
 exports.updateProduct = async (req, res) => {
   try {
-    const { productId } = req.body;
+    const { productId, retainedImageHashes = [] } = req.body;
 
     if (!productId) {
+      await cleanupFiles(req.files);
       return res.status(400).json({
         success: false,
         message: 'Product ID is required',
@@ -472,6 +511,7 @@ exports.updateProduct = async (req, res) => {
 
     const existingProduct = await Product.findById(productId);
     if (!existingProduct) {
+      await cleanupFiles(req.files);
       return res.status(404).json({
         success: false,
         message: 'Product not found',
@@ -479,22 +519,113 @@ exports.updateProduct = async (req, res) => {
     }
 
     const updateData = { ...req.body };
-
     delete updateData.productId;
-
     delete updateData.productImages;
+    delete updateData.retainedImageHashes;
 
     if (updateData.price !== undefined) {
-      updateData.price = parseFloat(updateData.price);
+      const price = parseFloat(updateData.price);
+      if (isNaN(price) || price < 0) {
+        await cleanupFiles(req.files);
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid price value',
+        });
+      }
+      updateData.price = price;
     }
 
-    if (updateData.salePrice !== undefined) {
-      updateData.salePrice = parseFloat(updateData.salePrice);
+    if (updateData.salePrice !== undefined && updateData.salePrice !== '') {
+      const salePrice = parseFloat(updateData.salePrice);
+      if (isNaN(salePrice) || salePrice < 0) {
+        await cleanupFiles(req.files);
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid sale price value',
+        });
+      }
+      updateData.salePrice = salePrice;
     }
 
     if (updateData.quantity !== undefined) {
-      updateData.quantity = parseInt(updateData.quantity);
+      const quantity = parseInt(updateData.quantity);
+      if (isNaN(quantity) || quantity < 0) {
+        await cleanupFiles(req.files);
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid quantity value',
+        });
+      }
+      updateData.quantity = quantity;
     }
+
+    let finalImageBuffers = [];
+
+    if (req.body.retainedImageHashes) {
+      try {
+        const retainedHashes = JSON.parse(req.body.retainedImageHashes);
+        if (Array.isArray(retainedHashes)) {
+          retainedHashes.forEach(hash => {
+            if (typeof hash === 'string') {
+              const buffer = Buffer.from(hash, 'base64');
+              if (buffer.length > 0) {
+                finalImageBuffers.push(buffer);
+              }
+            }
+          });
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    }
+
+    if (req.files && req.files.length > 0) {
+      if (finalImageBuffers.length + req.files.length > 4) {
+        await cleanupFiles(req.files);
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot have more than 4 product images',
+        });
+      }
+
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+      const maxFileSize = 5 * 1024 * 1024;
+
+      for (const file of req.files) {
+        if (!allowedTypes.includes(file.mimetype)) {
+          await cleanupFiles(req.files);
+          return res.status(400).json({
+            success: false,
+            message: 'Invalid file type. Allowed types: JPG, PNG, WEBP',
+          });
+        }
+
+        if (file.size > maxFileSize) {
+          await cleanupFiles(req.files);
+          return res.status(400).json({
+            success: false,
+            message: 'File is too large. Maximum size is 5MB',
+          });
+        }
+
+        try {
+          const buffer = await fileToBuffer(file);
+          finalImageBuffers.push(buffer);
+        } catch (error) {
+          console.error('Error processing file:', error);
+        }
+      }
+    }
+
+    if (finalImageBuffers.length === 0) {
+      await cleanupFiles(req.files);
+      return res.status(400).json({
+        success: false,
+        message: 'At least one product image is required',
+      });
+    }
+
+    updateData.productImages = finalImageBuffers;
 
     const updatedProduct = await Product.findByIdAndUpdate(
       productId,
@@ -502,16 +633,25 @@ exports.updateProduct = async (req, res) => {
       { new: true, runValidators: true }
     );
 
+    await cleanupFiles(req.files);
+
     res.status(200).json({
       success: true,
       message: 'Product updated successfully',
       product: updatedProduct,
+      imageUpdateSummary: {
+        totalImages: finalImageBuffers.length,
+        newImagesAdded: req.files?.length || 0,
+        existingImagesRetained: finalImageBuffers.length - (req.files?.length || 0)
+      }
     });
+
   } catch (error) {
     console.error('Update Product Error:', error);
+    await cleanupFiles(req.files);
     res.status(500).json({
       success: false,
-      message: 'An error occurred while updating the product',
+      message: 'An error occurred while updating the product'
     });
   }
 };
