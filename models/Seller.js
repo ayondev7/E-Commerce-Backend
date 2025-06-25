@@ -33,6 +33,11 @@ const sellerSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  lastNotificationSeen: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: 'SellerNotification',
+  default: null
+},
   sellerImage: {
     type: Buffer,
     required: true

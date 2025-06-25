@@ -1,6 +1,9 @@
 const Product = require("../models/Product");
 const { body, validationResult } = require("express-validator");
 const sharp = require("sharp");
+const crypto = require("crypto");
+const fs = require("fs").promises;
+const path = require("path");
 
 exports.createProduct = [
   body("title").trim().notEmpty().withMessage("Title is required"),
@@ -80,8 +83,10 @@ exports.createProduct = [
       }
 
       if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ error: "At least one product image is required" });
-    }
+        return res
+          .status(400)
+          .json({ error: "At least one product image is required" });
+      }
 
       let productImages = [];
       if (req.files && req.files.length > 0) {
@@ -211,10 +216,8 @@ exports.getAllProductsById = async (req, res) => {
 
     const productIds = products.map((p) => p.productId || p.id);
 
-    
     const dbProducts = await Product.find({ _id: { $in: productIds } });
 
-   
     const formattedProducts = products.map((requestedProduct) => {
       const requestedId = requestedProduct.productId || requestedProduct.id;
       const quantity = requestedProduct.quantity;
@@ -236,7 +239,7 @@ exports.getAllProductsById = async (req, res) => {
         title: dbProduct.title,
         sku: dbProduct.sku,
         price: dbProduct.price,
-        quantity, 
+        quantity,
         colour: dbProduct.colour,
         model: dbProduct.model,
         image: dbProduct.productImages?.[0]
@@ -304,7 +307,7 @@ exports.getSingleProduct = async (req, res) => {
     const sellerId = req.seller?._id;
 
     if (!sellerId) {
-      return res.status(401).json({ error: 'Unauthorized' });
+      return res.status(401).json({ error: "Unauthorized" });
     }
 
     const product = await Product.findOne({
@@ -313,13 +316,13 @@ exports.getSingleProduct = async (req, res) => {
     });
 
     if (!product) {
-      return res.status(404).json({ error: 'Product not found' });
+      return res.status(404).json({ error: "Product not found" });
     }
 
     const productObj = product.toObject();
 
     productObj.productImageStrings = productObj.productImages.map((img) =>
-      img ? img.toString('base64') : null
+      img ? img.toString("base64") : null
     );
 
     delete productObj.productImages;
@@ -335,8 +338,8 @@ exports.getSingleProduct = async (req, res) => {
 
     return res.status(200).json(productObj);
   } catch (error) {
-    console.error('Error fetching product:', error);
-    return res.status(500).json({ error: 'Internal Server Error' });
+    console.error("Error fetching product:", error);
+    return res.status(500).json({ error: "Internal Server Error" });
   }
 };
 
@@ -356,7 +359,9 @@ exports.deleteProduct = async (req, res) => {
     });
 
     if (!product) {
-      return res.status(404).json({ error: "Product not found or not authorized" });
+      return res
+        .status(404)
+        .json({ error: "Product not found or not authorized" });
     }
 
     res.status(200).json({ message: "Product deleted successfully" });
@@ -459,19 +464,15 @@ exports.getProductStats = async (req, res) => {
   }
 };
 
-const crypto = require('crypto');
-const fs = require('fs').promises;
-const path = require('path');
-
 const generateImageHash = (buffer) => {
-  return crypto.createHash('md5').update(buffer).digest('hex');
+  return crypto.createHash("md5").update(buffer).digest("hex");
 };
 
 async function fileToBuffer(file) {
   if (file?.buffer) {
-    return file.buffer; // multer memoryStorage
+    return file.buffer;
   } else if (file?.path) {
-    return await fs.readFile(file.path); // diskStorage fallback
+    return await fs.readFile(file.path);
   } else {
     throw new TypeError("Invalid file input: missing buffer or path");
   }
@@ -490,7 +491,10 @@ async function cleanupFiles(files = []) {
         try {
           await fs.unlink(file.path);
         } catch (err) {
-          console.error(`Failed to delete temp file ${file.path}:`, err.message);
+          console.error(
+            `Failed to delete temp file ${file.path}:`,
+            err.message
+          );
         }
       }
     })
@@ -505,7 +509,7 @@ exports.updateProduct = async (req, res) => {
       await cleanupFiles(req.files);
       return res.status(400).json({
         success: false,
-        message: 'Product ID is required',
+        message: "Product ID is required",
       });
     }
 
@@ -514,7 +518,7 @@ exports.updateProduct = async (req, res) => {
       await cleanupFiles(req.files);
       return res.status(404).json({
         success: false,
-        message: 'Product not found',
+        message: "Product not found",
       });
     }
 
@@ -529,19 +533,19 @@ exports.updateProduct = async (req, res) => {
         await cleanupFiles(req.files);
         return res.status(400).json({
           success: false,
-          message: 'Invalid price value',
+          message: "Invalid price value",
         });
       }
       updateData.price = price;
     }
 
-    if (updateData.salePrice !== undefined && updateData.salePrice !== '') {
+    if (updateData.salePrice !== undefined && updateData.salePrice !== "") {
       const salePrice = parseFloat(updateData.salePrice);
       if (isNaN(salePrice) || salePrice < 0) {
         await cleanupFiles(req.files);
         return res.status(400).json({
           success: false,
-          message: 'Invalid sale price value',
+          message: "Invalid sale price value",
         });
       }
       updateData.salePrice = salePrice;
@@ -553,7 +557,7 @@ exports.updateProduct = async (req, res) => {
         await cleanupFiles(req.files);
         return res.status(400).json({
           success: false,
-          message: 'Invalid quantity value',
+          message: "Invalid quantity value",
         });
       }
       updateData.quantity = quantity;
@@ -565,9 +569,9 @@ exports.updateProduct = async (req, res) => {
       try {
         const retainedHashes = JSON.parse(req.body.retainedImageHashes);
         if (Array.isArray(retainedHashes)) {
-          retainedHashes.forEach(hash => {
-            if (typeof hash === 'string') {
-              const buffer = Buffer.from(hash, 'base64');
+          retainedHashes.forEach((hash) => {
+            if (typeof hash === "string") {
+              const buffer = Buffer.from(hash, "base64");
               if (buffer.length > 0) {
                 finalImageBuffers.push(buffer);
               }
@@ -584,11 +588,16 @@ exports.updateProduct = async (req, res) => {
         await cleanupFiles(req.files);
         return res.status(400).json({
           success: false,
-          message: 'Cannot have more than 4 product images',
+          message: "Cannot have more than 4 product images",
         });
       }
 
-      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+      const allowedTypes = [
+        "image/jpeg",
+        "image/jpg",
+        "image/png",
+        "image/webp",
+      ];
       const maxFileSize = 5 * 1024 * 1024;
 
       for (const file of req.files) {
@@ -596,7 +605,7 @@ exports.updateProduct = async (req, res) => {
           await cleanupFiles(req.files);
           return res.status(400).json({
             success: false,
-            message: 'Invalid file type. Allowed types: JPG, PNG, WEBP',
+            message: "Invalid file type. Allowed types: JPG, PNG, WEBP",
           });
         }
 
@@ -604,15 +613,26 @@ exports.updateProduct = async (req, res) => {
           await cleanupFiles(req.files);
           return res.status(400).json({
             success: false,
-            message: 'File is too large. Maximum size is 5MB',
+            message: "File is too large. Maximum size is 5MB",
           });
         }
 
         try {
           const buffer = await fileToBuffer(file);
-          finalImageBuffers.push(buffer);
+
+          if (isValidBuffer(buffer)) {
+            const processed = await sharp(buffer)
+              .webp({ lossless: true, effort: 4 })
+              .toBuffer();
+
+            finalImageBuffers.push(processed);
+          } else {
+            console.warn(
+              `Skipped invalid or too small buffer for file: ${file.originalname}`
+            );
+          }
         } catch (error) {
-          console.error('Error processing file:', error);
+          console.error(`Error processing file ${file.originalname}:`, error);
         }
       }
     }
@@ -621,7 +641,7 @@ exports.updateProduct = async (req, res) => {
       await cleanupFiles(req.files);
       return res.status(400).json({
         success: false,
-        message: 'At least one product image is required',
+        message: "At least one product image is required",
       });
     }
 
@@ -637,22 +657,21 @@ exports.updateProduct = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: 'Product updated successfully',
+      message: "Product updated successfully",
       product: updatedProduct,
       imageUpdateSummary: {
         totalImages: finalImageBuffers.length,
         newImagesAdded: req.files?.length || 0,
-        existingImagesRetained: finalImageBuffers.length - (req.files?.length || 0)
-      }
+        existingImagesRetained:
+          finalImageBuffers.length - (req.files?.length || 0),
+      },
     });
-
   } catch (error) {
-    console.error('Update Product Error:', error);
+    console.error("Update Product Error:", error);
     await cleanupFiles(req.files);
     res.status(500).json({
       success: false,
-      message: 'An error occurred while updating the product'
+      message: "An error occurred while updating the product",
     });
   }
 };
-
