@@ -211,7 +211,7 @@ exports.AddOrder = async (req, res) => {
           notificationType: "order placed",
           orderId: savedOrder._id,
           sellerId: productDoc.sellerId,
-          description: `An order has been placed for ${productDoc.title}`,
+          description: `An order has been placed for '${productDoc.title}'`,
           timestamp: new Date(),
         });
 
@@ -399,7 +399,7 @@ exports.paymentSuccess = async (req, res) => {
             notificationType: "Payment Received",
             orderId: order._id,
             sellerId: product.sellerId,
-            description: `You have received payment for order ID ${order.orderId}`,
+            description: `You have received payment for order ID #${order.orderId}`,
             timestamp: new Date(),
           });
           await sellerNotification.save({ session });
