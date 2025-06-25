@@ -4,6 +4,8 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const sharp = require("sharp");
 const SellerNotification = require("../models/SellerNotification");
+const Product = require("../models/Product");
+const Order = require("../models/Order");
 
 exports.createSeller = [
   body("name").trim().notEmpty().withMessage("Name is required"),
@@ -199,4 +201,35 @@ exports.updateLastNotificationSeen = async (req, res) => {
   });
 
   res.status(200).json({ success: true, message: 'Last seen notification updated successfully' });
+};
+
+exports.getSellerPayments = async (req, res) => {
+  try {
+    const { seller } = req;
+    const sellerId = seller?._id;
+
+    if (!sellerId) {
+      return res.status(400).json({ message: "Seller ID is required" });
+    }
+
+    const sellerProducts = await Product.find({ sellerId }).select("_id title").lean();
+
+    const productIdToTitleMap = {};
+    const sellerProductIds = sellerProducts.map((product) => {
+      productIdToTitleMap[product._id.toString()] = product.title;
+      return product._id;
+    });
+
+    const orders = await Order.find({ productId: { $in: sellerProductIds } }).lean();
+
+    const payments = orders.map((order) => ({
+      ...order,
+      productTitle: productIdToTitleMap[order.productId.toString()] || null,
+    }));
+
+    res.status(200).json({ success: true, payments });
+  } catch (error) {
+    console.error("Error fetching seller payments:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
 };
