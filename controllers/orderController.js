@@ -9,6 +9,7 @@ const { customAlphabet } = require("nanoid");
 const orderIdNanoid = customAlphabet("0123456789", 5);
 const txnIdNanoid = customAlphabet("0123456789", 7);
 const SSLCommerzPayment = require("sslcommerz-lts");
+const SellerNotification = require("../models/SellerNotification");
 const store_id = process.env.SSLCOMMERZ_STORE_ID;
 const store_passwd = process.env.SSLCOMMERZ_STORE_PASSWORD;
 const is_live = process.env.SSLCOMMERZ_IS_LIVE === "true";
@@ -204,6 +205,19 @@ exports.AddOrder = async (req, res) => {
       const savedOrder = await order.save({ session });
       createdOrders.push(savedOrder);
 
+      const productDoc = await Product.findById(productId).session(session);
+      if (productDoc && productDoc.sellerId) {
+        const sellerNotification = new SellerNotification({
+          notificationType: "order placed",
+          orderId: savedOrder._id,
+          sellerId: productDoc.sellerId,
+          description: `An order has been placed for ${productDoc.title}`,
+          timestamp: new Date(),
+        });
+
+        await sellerNotification.save({ session });
+      }
+
       const activity = new RecentActivity({
         customerId,
         orderId: savedOrder._id,
@@ -346,7 +360,9 @@ exports.paymentSuccess = async (req, res) => {
   const { tran_id } = req.query;
   try {
     if (!tran_id || !tran_id.startsWith("temp_")) {
-      return res.redirect(`${process.env.FRONTEND_URL}/payment/fail?tran_id=invalid`);
+      return res.redirect(
+        `${process.env.FRONTEND_URL}/payment/fail?tran_id=invalid`
+      );
     }
 
     const tempOrderId = tran_id.replace("temp_", "");
@@ -355,9 +371,11 @@ exports.paymentSuccess = async (req, res) => {
       .populate("shippingInfoId");
 
     if (!tempOrder) {
-      return res.redirect(`${process.env.FRONTEND_URL}/payment/fail?tran_id=${tran_id}`);
+      return res.redirect(
+        `${process.env.FRONTEND_URL}/payment/fail?tran_id=${tran_id}`
+      );
     }
-    
+
     const session = await mongoose.startSession();
     session.startTransaction();
 
@@ -368,8 +386,30 @@ exports.paymentSuccess = async (req, res) => {
         { session }
       );
 
+      const populatedOrders = await Order.find({
+        _id: { $in: tempOrder.orders },
+      }).session(session);
+
+      for (const order of populatedOrders) {
+        const product = await Product.findById(order.productId).session(
+          session
+        );
+        if (product && product.sellerId) {
+          const sellerNotification = new SellerNotification({
+            notificationType: "Payment Received",
+            orderId: order._id,
+            sellerId: product.sellerId,
+            description: `You have received payment for order ID ${order.orderId}`,
+            timestamp: new Date(),
+          });
+          await sellerNotification.save({ session });
+        }
+      }
+
       const orderedProductIds = tempOrder.products.map((p) => p.productId);
-      const carts = await Cart.find({ customerId: tempOrder.customerId }).session(session);
+      const carts = await Cart.find({
+        customerId: tempOrder.customerId,
+      }).session(session);
 
       for (const cart of carts) {
         const productIdsArray = Array.isArray(cart.productIds)
@@ -392,15 +432,21 @@ exports.paymentSuccess = async (req, res) => {
       await session.commitTransaction();
       session.endSession();
 
-      return res.redirect(`${process.env.FRONTEND_URL}/payment/success?tran_id=${tran_id}`);
+      return res.redirect(
+        `${process.env.FRONTEND_URL}/payment/success?tran_id=${tran_id}`
+      );
     } catch (error) {
       await session.abortTransaction();
       session.endSession();
-      return res.redirect(`${process.env.FRONTEND_URL}/payment/fail?tran_id=${tran_id}`);
+      return res.redirect(
+        `${process.env.FRONTEND_URL}/payment/fail?tran_id=${tran_id}`
+      );
     }
   } catch (error) {
     console.error("Payment success error:", error);
-    return res.redirect(`${process.env.FRONTEND_URL}/payment/fail?tran_id=${tran_id}`);
+    return res.redirect(
+      `${process.env.FRONTEND_URL}/payment/fail?tran_id=${tran_id}`
+    );
   }
 };
 
@@ -712,6 +758,19 @@ exports.updateOrderStatus = async (req, res) => {
       activityType: `order ${orderStatus}`,
       activityStatus: `Your order #${order.orderId} has been ${orderStatus}`,
     });
+
+    if (customerId && !sellerId) {
+      const product = await Product.findById(order.productId);
+      if (product && product.sellerId) {
+        await SellerNotification.create({
+          notificationType: `Order ${orderStatus}`,
+          orderId: order._id,
+          sellerId: product.sellerId,
+          description: `Order #${order.orderId} has been ${order.orderStatus} by the customer.`,
+          timestamp: new Date(),
+        });
+      }
+    }
 
     res
       .status(200)
