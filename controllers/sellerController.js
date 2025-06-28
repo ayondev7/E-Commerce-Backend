@@ -42,7 +42,7 @@ exports.createSeller = [
       const seller = new Seller({
         name,
         email,
-        lastNotificationSeen,
+        lastNotificationSeen:null,
         password: hashedPassword,
         sellerImage,
       });

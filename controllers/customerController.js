@@ -7,7 +7,10 @@ const Order = require("../models/Order");
 const Wishlist = require("../models/Wishlist");
 const RecentActivity = require("../models/RecentActivity");
 
-const buildCustomerPayload = async ({ firstName, lastName, email, password, phone, bio }, file) => {
+const buildCustomerPayload = async (
+  { firstName, lastName, email, password, phone, bio },
+  file
+) => {
   const customerImage = file
     ? await sharp(file.buffer).webp({ lossless: true, effort: 4 }).toBuffer()
     : undefined;
@@ -22,7 +25,7 @@ const buildCustomerPayload = async ({ firstName, lastName, email, password, phon
     phone,
     lastNotificationSeen,
     bio,
-    ...(customerImage && { customerImage })
+    ...(customerImage && { customerImage }),
   };
 };
 
@@ -36,14 +39,19 @@ exports.createCustomer = [
   async (req, res) => {
     try {
       const errors = validationResult(req);
-      if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+      if (!errors.isEmpty())
+        return res.status(400).json({ errors: errors.array() });
 
       const { email } = req.body;
       const existingCustomer = await Customer.findOne({ email });
-      if (existingCustomer) return res.status(400).json({ error: "Email already exists" });
+      if (existingCustomer)
+        return res.status(400).json({ error: "Email already exists" });
 
       const customerData = await buildCustomerPayload(req.body, req.file);
-      const customer = new Customer(customerData);
+      const customer = new Customer({
+        ...customerData,
+        lastNotificationSeen: null, 
+      });
       await customer.save();
 
       const token = jwt.sign(
@@ -56,12 +64,12 @@ exports.createCustomer = [
         token,
         customerId: customer._id,
         firstName: customer.firstName,
-        lastName: customer.lastName
+        lastName: customer.lastName,
       });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
-  }
+  },
 ];
 
 exports.loginCustomer = [
@@ -79,12 +87,16 @@ exports.loginCustomer = [
 
       const customer = await Customer.findOne({ email }).select("+password");
       if (!customer) {
-        return res.status(401).json({ error: "Incorrect Email! Please try again." });
+        return res
+          .status(401)
+          .json({ error: "Incorrect Email! Please try again." });
       }
 
       const isMatch = await bcrypt.compare(password, customer.password);
       if (!isMatch) {
-        return res.status(401).json({ error: "Incorrect Password! Please try again." });
+        return res
+          .status(401)
+          .json({ error: "Incorrect Password! Please try again." });
       }
 
       const token = jwt.sign(
@@ -105,32 +117,31 @@ exports.loginCustomer = [
       console.error(error);
       return res.status(500).json({ error: error.message });
     }
-  }
+  },
 ];
 
 exports.getCustomerProfileInfo = async (req, res) => {
   try {
     const customer = await Customer.findById(req.customer._id)
-      .select('-password -__v')
+      .select("-password -__v")
       .lean();
 
     if (!customer) {
-      return res.status(404).json({ error: 'Customer not found' });
+      return res.status(404).json({ error: "Customer not found" });
     }
 
     const { customerImage, ...profile } = customer;
 
     const responseData = {
       ...profile,
-      customerImage: customerImage?.toString('base64') || null
+      customerImage: customerImage?.toString("base64") || null,
     };
 
     return res.status(200).json(responseData);
-
   } catch (error) {
-    return res.status(500).json({ 
-      error: 'Failed to fetch profile',
-      details: error.message 
+    return res.status(500).json({
+      error: "Failed to fetch profile",
+      details: error.message,
     });
   }
 };
@@ -155,17 +166,17 @@ exports.getCustomerProfile = async (req, res) => {
       });
     }
 
-    const { password, customerImage, firstName, lastName, ...rest } = foundCustomer.toObject();
+    const { password, customerImage, firstName, lastName, ...rest } =
+      foundCustomer.toObject();
 
     return res.status(200).json({
       success: true,
       data: {
         ...rest,
         name: `${firstName} ${lastName}`,
-        image: customerImage ? customerImage.toString('base64') : null,
+        image: customerImage ? customerImage.toString("base64") : null,
       },
     });
-
   } catch (error) {
     console.error("Error fetching customer profile:", error);
     return res.status(500).json({
@@ -174,7 +185,6 @@ exports.getCustomerProfile = async (req, res) => {
     });
   }
 };
-
 
 exports.updateCustomer = async (req, res) => {
   try {
@@ -202,7 +212,7 @@ exports.updateCustomer = async (req, res) => {
 
     res.status(200).json({
       ...customerData,
-      customerImage: customerImage ? customerImage.toString("base64") : null
+      customerImage: customerImage ? customerImage.toString("base64") : null,
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -217,7 +227,7 @@ exports.getAllCustomers = async (req, res) => {
       const { customerImage, ...customerData } = customer.toObject();
       return {
         ...customerData,
-        customerImage: customerImage ? customerImage.toString("base64") : null
+        customerImage: customerImage ? customerImage.toString("base64") : null,
       };
     });
 
@@ -234,10 +244,10 @@ exports.getCustomerStats = async (req, res) => {
     const totalOrders = await Order.countDocuments({ customerId });
     const pendingOrders = await Order.countDocuments({
       customerId,
-      orderStatus: 'pending',
+      orderStatus: "pending",
     });
-    
-    const wishlists = await Wishlist.find({ customerId }, 'productIds');
+
+    const wishlists = await Wishlist.find({ customerId }, "productIds");
     const totalWishlistItems = wishlists.reduce(
       (total, wl) => total + (wl.productIds?.length || 0),
       0
@@ -249,8 +259,8 @@ exports.getCustomerStats = async (req, res) => {
       totalWishlistItems,
     });
   } catch (error) {
-    console.error('Error fetching customer stats:', error);
-    res.status(500).json({ error: 'Server error' });
+    console.error("Error fetching customer stats:", error);
+    res.status(500).json({ error: "Server error" });
   }
 };
 
@@ -263,7 +273,9 @@ exports.getActivitiesByCustomer = async (req, res) => {
       return res.status(400).json({ message: "Customer ID is required" });
     }
 
-    const activities = await RecentActivity.find({ customerId }).sort({ createdAt: -1 });
+    const activities = await RecentActivity.find({ customerId }).sort({
+      createdAt: -1,
+    });
 
     res.status(200).json({ success: true, activities });
   } catch (error) {
@@ -281,10 +293,14 @@ exports.getAllNotifications = async (req, res) => {
       return res.status(400).json({ message: "Customer ID is required" });
     }
 
-    const customerDoc = await Customer.findById(customerId).select("lastNotificationSeen");
+    const customerDoc = await Customer.findById(customerId).select(
+      "lastNotificationSeen"
+    );
     const lastSeenId = customerDoc?.lastNotificationSeen;
 
-    const activities = await RecentActivity.find({ customerId }).sort({ createdAt: -1 });
+    const activities = await RecentActivity.find({ customerId }).sort({
+      createdAt: -1,
+    });
 
     const processedActivities = activities.map((activity) => ({
       ...activity.toObject(),
@@ -308,14 +324,18 @@ exports.markNotificationsAsSeen = async (req, res) => {
     }
 
     if (!notificationId) {
-      return res.status(400).json({ success: false, message: "Notification ID is required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Notification ID is required" });
     }
 
     await Customer.findByIdAndUpdate(customer._id, {
       lastNotificationSeen: notificationId,
     });
 
-    res.status(200).json({ success: true, message: "Notifications marked as seen." });
+    res
+      .status(200)
+      .json({ success: true, message: "Notifications marked as seen." });
   } catch (error) {
     console.error("Error updating lastNotificationSeen:", error);
     res.status(500).json({ success: false, message: "Server error" });
