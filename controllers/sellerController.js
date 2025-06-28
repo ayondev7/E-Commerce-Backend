@@ -83,14 +83,14 @@ exports.loginSeller = [
 
       const seller = await Seller.findOne({ email }).select("+password");
       if (!seller) {
-        return res.status(401).json({ error: "Invalid email or password" });
+        return res.status(401).json({ error: "Invalid email" });
       }
 
       const { password: hashedPassword, sellerImage, ...sellerData } = seller.toObject();
 
       const isPasswordValid = await bcrypt.compare(password, hashedPassword);
       if (!isPasswordValid) {
-        return res.status(401).json({ error: "Invalid email or password" });
+        return res.status(401).json({ error: "Invalid password" });
       }
 
       const { _id: sellerId } = seller;
