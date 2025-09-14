@@ -6,7 +6,26 @@ const path = require("path");
 
 const app = express();
 
-app.use(cors());
+// Restrict CORS to only allow the configured FRONTEND_URL
+const allowedOrigin = process.env.FRONTEND_URL;
+app.use((req, res, next) => {
+  const origin = req.get('Origin');
+
+  // Allow non-browser same-origin requests (no Origin header)
+  if (!origin) return next();
+
+  if (allowedOrigin && origin === allowedOrigin) {
+    res.header('Access-Control-Allow-Origin', allowedOrigin);
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+    // Handle preflight
+    if (req.method === 'OPTIONS') return res.sendStatus(204);
+    return next();
+  }
+
+  // Block disallowed origins
+  res.status(403).json({ error: 'CORS policy: This origin is not allowed' });
+});
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));

@@ -25,6 +25,7 @@ const upload = multer({
 router.post('/register', upload.single('customerImage'), customerController.createCustomer);
 
 router.post('/login', customerController.loginCustomer);
+router.post('/guest-login', customerController.guestCustomerLogin);
 
 router.post('/mark-as-seen', auth, customerController.markNotificationsAsSeen);
 

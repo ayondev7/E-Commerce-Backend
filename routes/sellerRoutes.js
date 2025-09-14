@@ -23,6 +23,7 @@ const upload = multer({
 
 router.post('/register', upload.single('sellerImage'), sellerController.createSeller);
 router.post('/login', sellerController.loginSeller);
+router.post('/guest-login', sellerController.guestSellerLogin);
 router.get('/get-all-sellers', auth, sellerController.getAllSellers);
 router.get('/get-profile', auth, sellerController.getSellerProfile);
 router.get('/get-notifications', auth, sellerController.getSellerNotifications);
