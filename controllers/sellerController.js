@@ -233,3 +233,37 @@ exports.getSellerPayments = async (req, res) => {
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
+
+exports.guestSellerLogin = async (req, res) => {
+  try {
+    const guestEmail = process.env.GUEST_SELLER_EMAIL;
+    const guestPassword = process.env.GUEST_PASSWORD;
+
+    if (!guestEmail || !guestPassword) {
+      return res.status(500).json({ error: 'Guest credentials are not configured' });
+    }
+
+    const seller = await Seller.findOne({ email: guestEmail }).select('+password');
+    if (!seller) {
+      return res.status(404).json({ error: 'Guest seller not found' });
+    }
+
+    const isMatch = await bcrypt.compare(guestPassword, seller.password);
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Guest authentication failed' });
+    }
+
+    const { password: hashedPassword, sellerImage, ...sellerData } = seller.toObject();
+
+    const accessToken = jwt.sign(
+      { sellerId: seller._id },
+      process.env.JWT_SECRET,
+      { expiresIn: '3h' }
+    );
+
+    return res.status(200).json({ accessToken, seller: sellerData });
+  } catch (error) {
+    console.error('Guest seller login error:', error);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};

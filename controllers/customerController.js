@@ -321,3 +321,39 @@ exports.markNotificationsAsSeen = async (req, res) => {
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
+
+exports.guestCustomerLogin = async (req, res) => {
+  try {
+    const guestEmail = process.env.GUEST_CUSTOMER_EMAIL;
+    const guestPassword = process.env.GUEST_PASSWORD;
+
+    if (!guestEmail || !guestPassword) {
+      return res.status(500).json({ error: 'Guest credentials are not configured' });
+    }
+
+    const customer = await Customer.findOne({ email: guestEmail }).select('+password');
+    if (!customer) {
+      return res.status(404).json({ error: 'Guest customer not found' });
+    }
+
+    const isMatch = await bcrypt.compare(guestPassword, customer.password);
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Guest authentication failed' });
+    }
+
+    const token = jwt.sign(
+      { customerId: customer._id },
+      process.env.JWT_SECRET,
+      { expiresIn: '3h' }
+    );
+
+    const customerObj = customer.toObject();
+    delete customerObj.password;
+    delete customerObj.customerImage;
+
+    return res.status(200).json({ accessToken: token, customer: customerObj });
+  } catch (error) {
+    console.error('Guest login error:', error);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
