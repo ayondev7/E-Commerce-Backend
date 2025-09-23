@@ -114,11 +114,7 @@ exports.getCartItems = async (req, res) => {
         stock: product.quantity,
         colour: product.colour,
         model: product.model,
-        image:
-          product.productImages?.length > 0 &&
-          Buffer.isBuffer(product.productImages[0])
-            ? product.productImages[0].toString("base64")
-            : null,
+        image: product.productImages?.length > 0 ? product.productImages[0] : null,
       }));
 
       grouped[title].products.push(...products);

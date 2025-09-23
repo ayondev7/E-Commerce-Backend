@@ -649,9 +649,7 @@ exports.getOrderById = async (req, res) => {
         ? "low stock"
         : "active";
 
-    const firstImageBase64 = product.productImages?.[0]
-      ? product.productImages[0].toString("base64")
-      : null;
+  const firstImageUrl = product.productImages?.[0] || null;
 
     const response = {
       _id: order._id,
@@ -681,7 +679,7 @@ exports.getOrderById = async (req, res) => {
         tags: product.tags,
         quantity: product.quantity,
         stockStatus,
-        firstImageBase64,
+  firstImageUrl,
       },
 
       shippingInfo: order.shippingInfoId,

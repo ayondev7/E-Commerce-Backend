@@ -1,16 +1,17 @@
 const Seller = require("../models/Seller");
-const { body, validationResult } = require("express-validator");
+const { validationResult } = require("express-validator");
+const { createSellerValidators, loginSellerValidators } = require('../validators/sellerValidators');
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const sharp = require("sharp");
+const { uploadToImageKit } = require('../utils/imagekitClient');
 const SellerNotification = require("../models/SellerNotification");
 const Product = require("../models/Product");
 const Order = require("../models/Order");
 
+
 exports.createSeller = [
-  body("name").trim().notEmpty().withMessage("Name is required"),
-  body("email").trim().notEmpty().isEmail().withMessage("Valid email is required"),
-  body("password").trim().notEmpty().withMessage("Password is required"),
+  ...createSellerValidators,
 
   async (req, res) => {
     try {
@@ -30,12 +31,22 @@ exports.createSeller = [
         return res.status(400).json({ error: "Email already in use" });
       }
 
-      const sellerImage = await sharp(req.file.buffer)
-        .webp({
-          lossless: true,
-          effort: 4
-        })
+      const processed = await sharp(req.file.buffer)
+        .webp({ lossless: true, effort: 4 })
         .toBuffer();
+
+      // upload to ImageKit (guarded)
+      let sellerImageUrl = null;
+      try {
+        const uploadResult = await uploadToImageKit({
+          file: processed,
+          fileName: `${Date.now()}_${req.file.originalname}.webp`,
+          useUniqueFileName: true,
+        });
+        sellerImageUrl = uploadResult?.url || null;
+      } catch (uploadErr) {
+        console.error('ImageKit upload error for seller image:', uploadErr);
+      }
 
       const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -44,7 +55,7 @@ exports.createSeller = [
         email,
         lastNotificationSeen:null,
         password: hashedPassword,
-        sellerImage,
+        sellerImage: sellerImageUrl,
       });
 
       await seller.save();
@@ -69,8 +80,7 @@ exports.createSeller = [
 ];
 
 exports.loginSeller = [
-  body("email").trim().notEmpty().isEmail().withMessage("Valid email is required"),
-  body("password").trim().notEmpty().withMessage("Password is required"),
+  ...loginSellerValidators,
 
   async (req, res) => {
     try {
@@ -86,7 +96,7 @@ exports.loginSeller = [
         return res.status(401).json({ error: "Invalid email" });
       }
 
-      const { password: hashedPassword, sellerImage, ...sellerData } = seller.toObject();
+  const { password: hashedPassword, sellerImage, ...sellerData } = seller.toObject();
 
       const isPasswordValid = await bcrypt.compare(password, hashedPassword);
       if (!isPasswordValid) {
@@ -119,7 +129,7 @@ exports.getAllSellers = async (req, res) => {
       const { sellerImage, ...sellerData } = seller.toObject();
       return {
         ...sellerData,
-        sellerImage: sellerImage ? sellerImage.toString("base64") : null,
+        sellerImage: sellerImage || null,
       };
     });
 
@@ -155,7 +165,7 @@ exports.getSellerProfile = async (req, res) => {
       success: true,
       data: {
         ...rest,
-        image: sellerImage ? sellerImage.toString('base64') : null,
+        image: sellerImage || null,
       },
     });
 

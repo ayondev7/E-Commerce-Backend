@@ -115,17 +115,14 @@ exports.getWishlistItems = async (req, res) => {
     const results = wishlists.map((list) => ({
       title: list.title,
       _id: list._id,
-      products: list.productIds.map((product) => ({
+        products: list.productIds.map((product) => ({
         _id: product._id,
         title: product.title,
         price: product.price,
         stock: product.quantity,
         colour: product.colour,
         model: product.model,
-        image:
-          product.productImages?.length > 0 && Buffer.isBuffer(product.productImages[0])
-            ? product.productImages[0].toString('base64')
-            : null
+        image: product.productImages?.length > 0 ? product.productImages[0] : null
       }))
     }));
 

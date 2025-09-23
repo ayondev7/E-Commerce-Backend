@@ -1,75 +1,14 @@
 const Product = require("../models/Product");
-const { body, validationResult } = require("express-validator");
+const { validationResult } = require("express-validator");
+const { baseProductValidators } = require('../validators/productValidators');
 const sharp = require("sharp");
 const crypto = require("crypto");
 const fs = require("fs").promises;
 const path = require("path");
+const { uploadToImageKit } = require('../utils/imagekitClient');
 
 exports.createProduct = [
-  body("title").trim().notEmpty().withMessage("Title is required"),
-  body("description").trim().notEmpty().withMessage("Description is required"),
-  body("category").trim().notEmpty().withMessage("Category is required"),
-  body("brand").trim().notEmpty().withMessage("Brand is required"),
-  body("model").trim().notEmpty().withMessage("Model is required"),
-  body("storage").trim().notEmpty().withMessage("Storage is required"),
-  body("colour").trim().notEmpty().withMessage("Colour is required"),
-  body("ram").trim().notEmpty().withMessage("RAM is required"),
-  body("conditions").custom((value) => {
-    if (!value) throw new Error("Conditions are required");
-    const parsed = typeof value === "string" ? JSON.parse(value) : value;
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      throw new Error("At least one condition is required");
-    }
-    return true;
-  }),
-  body("features").custom((value) => {
-    if (!value) throw new Error("Features are required");
-    const parsed = typeof value === "string" ? JSON.parse(value) : value;
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      throw new Error("At least one feature is required");
-    }
-    return true;
-  }),
-  body("price").isNumeric().withMessage("Price must be a number"),
-  body("salePrice")
-    .optional()
-    .isNumeric()
-    .withMessage("Sale price must be a number"),
-  body("quantity")
-    .isInt({ min: 0 })
-    .withMessage("Quantity must be a non-negative integer"),
-  body("sku")
-    .optional()
-    .trim()
-    .notEmpty()
-    .withMessage("SKU cannot be empty if provided"),
-  body("negotiable")
-    .optional()
-    .isBoolean()
-    .withMessage("Negotiable must be a boolean"),
-  body("tags")
-    .optional()
-    .custom((value) => {
-      const parsed = typeof value === "string" ? JSON.parse(value) : value;
-      if (!Array.isArray(parsed)) {
-        throw new Error("Tags must be an array");
-      }
-      return true;
-    }),
-  body("specifications")
-    .optional()
-    .custom((value) => {
-      const parsed = typeof value === "string" ? JSON.parse(value) : value;
-      if (!Array.isArray(parsed)) {
-        throw new Error("Specifications must be an array");
-      }
-      for (const spec of parsed) {
-        if (!spec.label || !spec.value) {
-          throw new Error("Each specification must have both label and value");
-        }
-      }
-      return true;
-    }),
+  ...baseProductValidators,
 
   async (req, res) => {
     try {
@@ -93,11 +32,23 @@ exports.createProduct = [
         if (req.files.length > 4) {
           return res.status(400).json({ error: "Maximum 4 images allowed" });
         }
+
         for (const file of req.files) {
           const processed = await sharp(file.buffer)
             .webp({ lossless: true, effort: 4 })
             .toBuffer();
-          productImages.push(processed);
+
+          // Upload to ImageKit (guarded)
+          try {
+            const uploadResult = await uploadToImageKit({
+              file: processed,
+              fileName: `${Date.now()}_${file.originalname}.webp`,
+              useUniqueFileName: true,
+            });
+            if (uploadResult && uploadResult.url) productImages.push(uploadResult.url);
+          } catch (uploadErr) {
+            console.error('ImageKit upload error for product image:', uploadErr);
+          }
         }
       }
 
@@ -193,9 +144,7 @@ exports.getAllProducts = async (req, res) => {
         category: product.category,
         stockStatus: status,
         status,
-        image: product.productImages?.[0]?.length
-          ? product.productImages[0].toString("base64")
-          : null,
+        image: product.productImages?.[0] || null,
       };
     });
 
@@ -242,9 +191,7 @@ exports.getAllProductsById = async (req, res) => {
         quantity,
         colour: dbProduct.colour,
         model: dbProduct.model,
-        image: dbProduct.productImages?.[0]
-          ? dbProduct.productImages[0].toString("base64")
-          : null,
+    image: dbProduct.productImages?.[0] || null,
       };
     });
 
@@ -321,9 +268,7 @@ exports.getAllProductsForShop = async (req, res) => {
 
       return {
         _id: product._id,
-        image: product.productImages?.[0] 
-          ? `data:image/webp;base64,${product.productImages[0].toString("base64")}`
-          : null,
+        image: product.productImages?.[0] || null,
         title: product.title,
         sku: product.sku,
         price: product.price,
@@ -363,13 +308,10 @@ exports.getProductDetails = async (req, res) => {
 
     const productObj = product.toObject();
 
-    // Convert productImages to base64 strings
-    productObj.productImageStrings = productObj.productImages.map((img) =>
-      img ? `data:image/webp;base64,${img.toString("base64")}` : null
-    );
+    // productImages already stores URLs; copy to productImageStrings for frontend
+    productObj.productImageStrings = productObj.productImages.map((img) => img || null);
 
-    // Remove the original productImages buffer data
-    delete productObj.productImages;
+    // Do not keep raw productImages buffers (now URLs)
 
     // Convert specifications array to the expected format
     if (productObj.specifications && Array.isArray(productObj.specifications)) {
@@ -385,8 +327,8 @@ exports.getProductDetails = async (req, res) => {
       _id: productObj._id,
       title: productObj.title,
       description: productObj.description,
-      productImages: [], // Empty array as requested
-      productImageStrings: productObj.productImageStrings,
+  productImages: [], // Empty array as requested
+  productImageStrings: productObj.productImageStrings,
       category: productObj.category,
       brand: productObj.brand,
       model: productObj.model,
@@ -446,10 +388,7 @@ exports.searchProducts = async (req, res) => {
       stock: product.quantity,
       colour: product.colour,
       model: product.model,
-      image:
-        product.productImages?.[0]?.length > 0
-          ? product.productImages[0].toString("base64")
-          : null,
+      image: product.productImages?.[0] || null,
     }));
 
     res.status(200).json({ products: formattedProducts });
@@ -479,9 +418,7 @@ exports.getSingleProduct = async (req, res) => {
 
     const productObj = product.toObject();
 
-    productObj.productImageStrings = productObj.productImages.map((img) =>
-      img ? img.toString("base64") : null
-    );
+    productObj.productImageStrings = productObj.productImages.map((img) => img || null);
 
     delete productObj.productImages;
 
@@ -554,9 +491,7 @@ exports.getProductsByCategory = async (req, res) => {
       const productObj = product.toObject();
       return {
         ...productObj,
-        productImages: productObj.productImages.map((img) =>
-          img.toString("base64")
-        ),
+        productImages: productObj.productImages.map((img) => img || null),
       };
     });
 
@@ -721,18 +656,17 @@ exports.updateProduct = async (req, res) => {
       updateData.quantity = quantity;
     }
 
-    let finalImageBuffers = [];
+    // finalImages will hold URLs (existing retained URLs + newly uploaded URLs)
+    let finalImages = [];
 
-    if (req.body.retainedImageHashes) {
+    // retainedImageHashes previously held base64; accept retainedImageUrls now
+    if (req.body.retainedImageUrls) {
       try {
-        const retainedHashes = JSON.parse(req.body.retainedImageHashes);
-        if (Array.isArray(retainedHashes)) {
-          retainedHashes.forEach((hash) => {
-            if (typeof hash === "string") {
-              const buffer = Buffer.from(hash, "base64");
-              if (buffer.length > 0) {
-                finalImageBuffers.push(buffer);
-              }
+        const retainedUrls = JSON.parse(req.body.retainedImageUrls);
+        if (Array.isArray(retainedUrls)) {
+          retainedUrls.forEach((u) => {
+            if (typeof u === "string" && u.trim().length > 0) {
+              finalImages.push(u);
             }
           });
         }
@@ -778,12 +712,25 @@ exports.updateProduct = async (req, res) => {
         try {
           const buffer = await fileToBuffer(file);
 
-          if (isValidBuffer(buffer)) {
+            if (isValidBuffer(buffer)) {
             const processed = await sharp(buffer)
               .webp({ lossless: true, effort: 4 })
               .toBuffer();
 
-            finalImageBuffers.push(processed);
+            // upload processed image to ImageKit (guarded)
+            try {
+              const uploadResult = await uploadToImageKit({
+                file: processed,
+                fileName: `${Date.now()}_${file.originalname}.webp`,
+                useUniqueFileName: true,
+              });
+
+              if (uploadResult && uploadResult.url) {
+                finalImages.push(uploadResult.url);
+              }
+            } catch (uploadErr) {
+              console.error('ImageKit upload error:', uploadErr);
+            }
           } else {
             console.warn(
               `Skipped invalid or too small buffer for file: ${file.originalname}`
@@ -795,7 +742,7 @@ exports.updateProduct = async (req, res) => {
       }
     }
 
-    if (finalImageBuffers.length === 0) {
+    if (finalImages.length === 0) {
       await cleanupFiles(req.files);
       return res.status(400).json({
         success: false,
@@ -803,7 +750,7 @@ exports.updateProduct = async (req, res) => {
       });
     }
 
-    updateData.productImages = finalImageBuffers;
+    updateData.productImages = finalImages;
 
     const updatedProduct = await Product.findByIdAndUpdate(
       productId,
@@ -818,10 +765,10 @@ exports.updateProduct = async (req, res) => {
       message: "Product updated successfully",
       product: updatedProduct,
       imageUpdateSummary: {
-        totalImages: finalImageBuffers.length,
+        totalImages: finalImages.length,
         newImagesAdded: req.files?.length || 0,
         existingImagesRetained:
-          finalImageBuffers.length - (req.files?.length || 0),
+          finalImages.length - (req.files?.length || 0),
       },
     });
   } catch (error) {

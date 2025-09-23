@@ -48,7 +48,7 @@ const customerSchema = new mongoose.Schema({
     required: true,
   },
   customerImage: {
-    type: Buffer
+    type: String
   }
 }, {
   timestamps: true

@@ -39,7 +39,7 @@ const sellerSchema = new mongoose.Schema({
   default: null
 },
   sellerImage: {
-    type: Buffer,
+    type: String,
     required: true
   }
 }, {

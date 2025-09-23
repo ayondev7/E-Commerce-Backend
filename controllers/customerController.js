@@ -1,5 +1,7 @@
 const Customer = require("../models/Customer");
-const { body, validationResult } = require("express-validator");
+const { validationResult } = require("express-validator");
+const { uploadToImageKit } = require('../utils/imagekitClient');
+const { createCustomerValidators, loginCustomerValidators } = require('../validators/customerValidators');
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const sharp = require("sharp");
@@ -8,9 +10,20 @@ const Wishlist = require("../models/Wishlist");
 const RecentActivity = require("../models/RecentActivity");
 
 const buildCustomerPayload = async ({ firstName, lastName, email, password, phone, bio }, file) => {
-  const customerImage = file
-    ? await sharp(file.buffer).webp({ lossless: true, effort: 4 }).toBuffer()
-    : undefined;
+  let customerImage = undefined;
+  if (file) {
+    const processed = await sharp(file.buffer).webp({ lossless: true, effort: 4 }).toBuffer();
+    try {
+      const uploadResult = await uploadToImageKit({
+        file: processed,
+        fileName: `${Date.now()}_${file.originalname}.webp`,
+        useUniqueFileName: true,
+      });
+      customerImage = uploadResult?.url || undefined;
+    } catch (uploadErr) {
+      console.error('ImageKit upload error for customer image:', uploadErr);
+    }
+  }
 
   const hashedPassword = await bcrypt.hash(password, 12);
 
@@ -27,11 +40,7 @@ const buildCustomerPayload = async ({ firstName, lastName, email, password, phon
 };
 
 exports.createCustomer = [
-  body("firstName").trim().notEmpty(),
-  body("lastName").trim().notEmpty(),
-  body("email").trim().isEmail().normalizeEmail(),
-  body("password").trim().isLength({ min: 6 }),
-  body("phone").optional().trim(),
+  ...createCustomerValidators,
 
   async (req, res) => {
     try {
@@ -65,8 +74,7 @@ exports.createCustomer = [
 ];
 
 exports.loginCustomer = [
-  body("email").isEmail().normalizeEmail(),
-  body("password").notEmpty(),
+  ...loginCustomerValidators,
 
   async (req, res) => {
     try {
@@ -122,7 +130,7 @@ exports.getCustomerProfileInfo = async (req, res) => {
 
     const responseData = {
       ...profile,
-      customerImage: customerImage?.toString('base64') || null
+      customerImage: customerImage || null
     };
 
     return res.status(200).json(responseData);
@@ -162,7 +170,7 @@ exports.getCustomerProfile = async (req, res) => {
       data: {
         ...rest,
         name: `${firstName} ${lastName}`,
-        image: customerImage ? customerImage.toString('base64') : null,
+        image: customerImage || null,
       },
     });
 
@@ -181,9 +189,17 @@ exports.updateCustomer = async (req, res) => {
     const updates = { ...req.body };
 
     if (req.file) {
-      updates.customerImage = await sharp(req.file.buffer)
-        .webp({ lossless: true, effort: 4 })
-        .toBuffer();
+      const processed = await sharp(req.file.buffer).webp({ lossless: true, effort: 4 }).toBuffer();
+      try {
+        const uploadResult = await uploadToImageKit({
+          file: processed,
+          fileName: `${Date.now()}_${req.file.originalname}.webp`,
+          useUniqueFileName: true,
+        });
+        updates.customerImage = uploadResult?.url || undefined;
+      } catch (uploadErr) {
+        console.error('ImageKit upload error for customer update image:', uploadErr);
+      }
     }
 
     if (updates.password) {
@@ -202,7 +218,7 @@ exports.updateCustomer = async (req, res) => {
 
     res.status(200).json({
       ...customerData,
-      customerImage: customerImage ? customerImage.toString("base64") : null
+      customerImage: customerImage || null
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -217,7 +233,7 @@ exports.getAllCustomers = async (req, res) => {
       const { customerImage, ...customerData } = customer.toObject();
       return {
         ...customerData,
-        customerImage: customerImage ? customerImage.toString("base64") : null
+        customerImage: customerImage || null
       };
     });
 

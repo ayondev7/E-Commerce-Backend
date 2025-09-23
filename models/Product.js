@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const productSchema = new mongoose.Schema({
   title: { type: String, required: true, trim: true },
   description: { type: String, required: true },
-  productImages: [{ type: Buffer }],
+  productImages: [{ type: String }],
   category: { type: String, required: true, trim: true },
   brand: { type: String, trim: true, required: true },
   model: { type: String, trim: true, required: true },
@@ -40,7 +40,7 @@ const productSchema = new mongoose.Schema({
 });
 
 productSchema.path('productImages').validate(function (value) {
-  return value.length <= 4;
+  return Array.isArray(value) ? value.length <= 4 : true;
 }, 'A product can have at most 4 images.');
 
 module.exports = mongoose.model('Product', productSchema);
