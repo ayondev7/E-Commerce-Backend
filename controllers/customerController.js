@@ -1,6 +1,6 @@
 import Customer from '../models/Customer.js';
 import { validationResult } from 'express-validator';
-import { uploadToImageKit } from '../utils/imagekitClient.js';
+import ImageKit from 'imagekit';
 import { createCustomerValidators, loginCustomerValidators } from '../validators/customerValidators.js';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
@@ -9,35 +9,17 @@ import Order from '../models/Order.js';
 import Wishlist from '../models/Wishlist.js';
 import RecentActivity from '../models/RecentActivity.js';
 
-const buildCustomerPayload = async ({ firstName, lastName, email, password, phone, bio }, file) => {
-  let customerImage = undefined;
-  if (file) {
-    const processed = await sharp(file.buffer).webp({ lossless: true, effort: 4 }).toBuffer();
-    try {
-      const uploadResult = await uploadToImageKit({
-        file: processed,
-        fileName: `${Date.now()}_${file.originalname}.webp`,
-        useUniqueFileName: true,
-      });
-      customerImage = uploadResult?.url || undefined;
-    } catch (uploadErr) {
-      console.error('ImageKit upload error for customer image:', uploadErr);
-    }
+function getImageKitInstance() {
+  const { IMAGEKIT_PUBLIC_KEY, IMAGEKIT_PRIVATE_KEY, IMAGEKIT_URL_ENDPOINT } = process.env;
+  if (!IMAGEKIT_PUBLIC_KEY || !IMAGEKIT_PRIVATE_KEY || !IMAGEKIT_URL_ENDPOINT) {
+    return null;
   }
-
-  const hashedPassword = await bcrypt.hash(password, 12);
-
-  return {
-    firstName,
-    lastName,
-    email,
-    password: hashedPassword,
-    phone,
-    lastNotificationSeen:null,
-    bio,
-    ...(customerImage && { customerImage })
-  };
-};
+  return new ImageKit({
+    publicKey: IMAGEKIT_PUBLIC_KEY,
+    privateKey: IMAGEKIT_PRIVATE_KEY,
+    urlEndpoint: IMAGEKIT_URL_ENDPOINT,
+  });
+}
 
 export const createCustomer = [
   ...createCustomerValidators,
@@ -51,8 +33,41 @@ export const createCustomer = [
       const existingCustomer = await Customer.findOne({ email });
       if (existingCustomer) return res.status(400).json({ error: "Email already exists" });
 
-      const customerData = await buildCustomerPayload(req.body, req.file);
-      const customer = new Customer(customerData);
+      const { firstName, lastName, email: bodyEmail, password, phone, bio } = req.body;
+
+      let customerImage = undefined;
+      if (req.file) {
+        const processed = await sharp(req.file.buffer).webp({ lossless: true, effort: 4 }).toBuffer();
+        const imageKit = getImageKitInstance();
+        if (imageKit) {
+          try {
+            const fileName = `${firstName ? firstName.replace(/\s+/g, "_") : 'customer'}_${Date.now()}.webp`;
+            const uploadResult = await imageKit.upload({
+              file: processed,
+              fileName,
+              useUniqueFileName: true,
+            });
+            customerImage = uploadResult?.url || undefined;
+          } catch (uploadErr) {
+            console.error('ImageKit upload error for customer image:', uploadErr);
+          }
+        } else {
+          console.warn('ImageKit not configured; skipping customer image upload');
+        }
+      }
+
+      const hashedPassword = await bcrypt.hash(password, 12);
+
+      const customer = new Customer({
+        firstName,
+        lastName,
+        email: bodyEmail,
+        password: hashedPassword,
+        phone,
+        lastNotificationSeen: null,
+        bio,
+        ...(customerImage && { customerImage }),
+      });
       await customer.save();
 
       const token = jwt.sign(
@@ -190,15 +205,21 @@ export const updateCustomer = async (req, res) => {
 
     if (req.file) {
       const processed = await sharp(req.file.buffer).webp({ lossless: true, effort: 4 }).toBuffer();
-      try {
-        const uploadResult = await uploadToImageKit({
-          file: processed,
-          fileName: `${Date.now()}_${req.file.originalname}.webp`,
-          useUniqueFileName: true,
-        });
-        updates.customerImage = uploadResult?.url || undefined;
-      } catch (uploadErr) {
-        console.error('ImageKit upload error for customer update image:', uploadErr);
+      const imageKit = getImageKitInstance();
+      if (imageKit) {
+        try {
+          const fileName = `${req.customer?.firstName ? req.customer.firstName.replace(/\s+/g, "_") : 'customer'}_${Date.now()}.webp`;
+          const uploadResult = await imageKit.upload({
+            file: processed,
+            fileName,
+            useUniqueFileName: true,
+          });
+          updates.customerImage = uploadResult?.url || undefined;
+        } catch (uploadErr) {
+          console.error('ImageKit upload error for customer update image:', uploadErr);
+        }
+      } else {
+        console.warn('ImageKit not configured; skipping customer update image upload');
       }
     }
 

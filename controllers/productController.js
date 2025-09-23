@@ -2,11 +2,23 @@ import Product from '../models/Product.js';
 import { validationResult } from 'express-validator';
 import { baseProductValidators } from '../validators/productValidators.js';
 import sharp from 'sharp';
+import ImageKit from 'imagekit';
 import crypto from 'crypto';
 import fs from 'fs';
 const fsp = fs.promises;
 import path from 'path';
-import { uploadToImageKit } from '../utils/imagekitClient.js';
+
+function getImageKitInstance() {
+  const { IMAGEKIT_PUBLIC_KEY, IMAGEKIT_PRIVATE_KEY, IMAGEKIT_URL_ENDPOINT } = process.env;
+  if (!IMAGEKIT_PUBLIC_KEY || !IMAGEKIT_PRIVATE_KEY || !IMAGEKIT_URL_ENDPOINT) {
+    return null;
+  }
+  return new ImageKit({
+    publicKey: IMAGEKIT_PUBLIC_KEY,
+    privateKey: IMAGEKIT_PRIVATE_KEY,
+    urlEndpoint: IMAGEKIT_URL_ENDPOINT,
+  });
+}
 
 export const createProduct = [
   ...baseProductValidators,
@@ -40,15 +52,21 @@ export const createProduct = [
             .toBuffer();
 
           // Upload to ImageKit (guarded)
-          try {
-            const uploadResult = await uploadToImageKit({
-              file: processed,
-              fileName: `${Date.now()}_${file.originalname}.webp`,
-              useUniqueFileName: true,
-            });
-            if (uploadResult && uploadResult.url) productImages.push(uploadResult.url);
-          } catch (uploadErr) {
-            console.error('ImageKit upload error for product image:', uploadErr);
+          const imageKit = getImageKitInstance();
+          if (imageKit) {
+            try {
+              const fileName = `${Date.now()}_${file.originalname}.webp`;
+              const uploadResult = await imageKit.upload({
+                file: processed,
+                fileName,
+                useUniqueFileName: true,
+              });
+              if (uploadResult && uploadResult.url) productImages.push(uploadResult.url);
+            } catch (uploadErr) {
+              console.error('ImageKit upload error for product image:', uploadErr);
+            }
+          } else {
+            console.warn('ImageKit not configured; skipping product image upload');
           }
         }
       }
@@ -719,18 +737,24 @@ export const updateProduct = async (req, res) => {
               .toBuffer();
 
             // upload processed image to ImageKit (guarded)
-            try {
-              const uploadResult = await uploadToImageKit({
-                file: processed,
-                fileName: `${Date.now()}_${file.originalname}.webp`,
-                useUniqueFileName: true,
-              });
+            const imageKit = getImageKitInstance();
+            if (imageKit) {
+              try {
+                const fileName = `${Date.now()}_${file.originalname}.webp`;
+                const uploadResult = await imageKit.upload({
+                  file: processed,
+                  fileName,
+                  useUniqueFileName: true,
+                });
 
-              if (uploadResult && uploadResult.url) {
-                finalImages.push(uploadResult.url);
+                if (uploadResult && uploadResult.url) {
+                  finalImages.push(uploadResult.url);
+                }
+              } catch (uploadErr) {
+                console.error('ImageKit upload error:', uploadErr);
               }
-            } catch (uploadErr) {
-              console.error('ImageKit upload error:', uploadErr);
+            } else {
+              console.warn('ImageKit not configured; skipping product image upload');
             }
           } else {
             console.warn(

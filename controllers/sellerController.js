@@ -27,53 +27,39 @@ export const createSeller = [
 
   async (req, res) => {
     try {
-      console.log('[createSeller] Incoming request body:', {
-        body: req.body,
-        file: req.file ? { originalname: req.file.originalname, size: req.file.size } : null,
-      });
-
-      console.log('[createSeller] ENV vars:', {
-        JWT_SECRET: !!process.env.JWT_SECRET,
-        IMAGEKIT_PUBLIC_KEY: !!process.env.IMAGEKIT_PUBLIC_KEY,
-        IMAGEKIT_PRIVATE_KEY: !!process.env.IMAGEKIT_PRIVATE_KEY,
-        IMAGEKIT_URL_ENDPOINT: !!process.env.IMAGEKIT_URL_ENDPOINT,
-      });
-
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
-        console.warn('[createSeller] Validation errors:', errors.array());
         return res.status(400).json({ errors: errors.array() });
       }
 
       const { name, email, password, phone } = req.body;
 
       if (!req.file) {
-        console.warn('[createSeller] Missing req.file');
         return res.status(400).json({ error: "Seller image is required" });
       }
 
       const existingSeller = await Seller.findOne({ email });
-      console.log('[createSeller] existingSeller:', existingSeller ? existingSeller._id : null);
       if (existingSeller) {
         return res.status(400).json({ error: "Email already in use" });
       }
-
-      // upload to ImageKit (no webp conversion)
       let sellerImageUrl = null;
       const imageKit = getImageKitInstance();
-      console.log('[createSeller] imageKit instance available:', !!imageKit);
       if (imageKit) {
         try {
-          console.log('[createSeller] Attempting ImageKit upload with file size:', req.file.buffer?.length);
+          const webpBuffer = await sharp(req.file.buffer)
+            .webp({ lossless: true })
+            .toBuffer();
+
+          const fileName = `${name.replace(/\s+/g, "_")}_${Date.now()}.webp`;
+
           const uploadResult = await imageKit.upload({
-            file: req.file.buffer, // directly use buffer
-            fileName: `${name.replace(/\s+/g, "_")}_${Date.now()}`,
+            file: webpBuffer,
+            fileName,
             useUniqueFileName: true,
           });
-          console.log('[createSeller] ImageKit uploadResult:', uploadResult && { url: uploadResult.url, fileId: uploadResult.fileId });
+
           sellerImageUrl = uploadResult.url;
         } catch (uploadErr) {
-          console.error("ImageKit upload error for seller image:", uploadErr && (uploadErr.stack || uploadErr));
         }
       }
 
@@ -88,13 +74,7 @@ export const createSeller = [
         sellerImage: sellerImageUrl,
       });
 
-      try {
-        await seller.save();
-        console.log('[createSeller] Seller saved with id:', seller._id);
-      } catch (saveErr) {
-        console.error('[createSeller] Error saving seller:', saveErr && (saveErr.stack || saveErr));
-        throw saveErr;
-      }
+      await seller.save();
 
       const accessToken = jwt.sign(
         { sellerId: seller._id },
@@ -107,7 +87,6 @@ export const createSeller = [
         sellerId: seller._id,
       });
     } catch (error) {
-      console.error('[createSeller] Caught error:', error && (error.stack || error));
       if (error && error.name === "ValidationError") {
         return res.status(400).json({ error: error.message });
       }
