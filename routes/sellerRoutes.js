@@ -1,9 +1,9 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const sellerController = require('../controllers/sellerController');
-const auth = require('../middleware/auth');
-const multer = require('multer');
-const path = require('path');
+import * as sellerController from '../controllers/sellerController.js';
+import auth from '../middleware/auth.js';
+import multer from 'multer';
+import path from 'path';
 
 const storage = multer.memoryStorage();
 const upload = multer({
@@ -30,4 +30,4 @@ router.get('/get-notifications', auth, sellerController.getSellerNotifications);
 router.patch('/update-notification', auth, sellerController.updateLastNotificationSeen);
 router.get('/get-payments', auth, sellerController.getSellerPayments);
 
-module.exports = router;
+export default router;

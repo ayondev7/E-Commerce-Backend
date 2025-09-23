@@ -1,5 +1,5 @@
-const mongoose = require('mongoose');
-const { customAlphabet } = require('nanoid');
+import mongoose from 'mongoose';
+import { customAlphabet } from 'nanoid';
 const orderIdNanoid = customAlphabet('0123456789', 5);
 const txnIdNanoid = customAlphabet('0123456789', 7);
 
@@ -92,4 +92,4 @@ orderSchema.pre('save', async function (next) {
 
 const Order = mongoose.model('Order', orderSchema);
 
-module.exports = Order;
+export default Order;

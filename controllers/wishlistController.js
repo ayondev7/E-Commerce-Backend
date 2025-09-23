@@ -1,10 +1,10 @@
-const Wishlist = require("../models/Wishlist");
-const mongoose = require("mongoose");
-const Product = require("../models/Product");
-const Seller = require("../models/Seller");
-const RecentActivity = require("../models/RecentActivity");
+import Wishlist from '../models/Wishlist.js';
+import mongoose from 'mongoose';
+import Product from '../models/Product.js';
+import Seller from '../models/Seller.js';
+import RecentActivity from '../models/RecentActivity.js';
 
-exports.createList = async (req, res) => {
+export const createList = async (req, res) => {
   try {
     const { customer } = req;
     const { _id: customerId } = customer;
@@ -34,7 +34,7 @@ exports.createList = async (req, res) => {
   }
 };
 
-exports.addToList = async (req, res) => {
+export const addToList = async (req, res) => {
   try {
     const { customer } = req;
     const { _id: customerId } = customer;
@@ -82,7 +82,7 @@ exports.addToList = async (req, res) => {
   }
 };
 
-exports.getAllLists = async (req, res) => {
+export const getAllLists = async (req, res) => {
   try {
     if (req.seller) {
       return res.status(200).json({ wishlists: [] });
@@ -101,7 +101,7 @@ exports.getAllLists = async (req, res) => {
 };
 
 
-exports.getWishlistItems = async (req, res) => {
+export const getWishlistItems = async (req, res) => {
   try {
     const { customer } = req;
     const { _id: customerId } = customer;
@@ -133,7 +133,7 @@ exports.getWishlistItems = async (req, res) => {
   }
 };
 
-exports.removeFromWishlist = async (req, res) => {
+export const removeFromWishlist = async (req, res) => {
   try {
     const { customer, params, body } = req;
     const { _id: customerId } = customer;

@@ -1,11 +1,11 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const auth = require('../middleware/auth');
-const cartController = require('../controllers/cartController');
+import auth from '../middleware/auth.js';
+import * as cartController from '../controllers/cartController.js';
 
 router.post('/add-to-cart', auth, cartController.addToCart);
 router.get('/get-all', auth, cartController.getCartItems);
 router.delete('/delete-cart-item', auth, cartController.removeFromCart);
 router.patch('/update-quantity', auth, cartController.updateCartItemQuantity);
 
-module.exports = router;
+export default router;

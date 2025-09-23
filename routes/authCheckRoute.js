@@ -1,7 +1,7 @@
-const express = require("express");
+import express from 'express';
 const router = express.Router();
-const authCheck = require("../controllers/authCheckController");
+import * as authCheck from '../controllers/authCheckController.js';
 
-router.get("/auth-check", authCheck.getUserType);
+router.get('/auth-check', authCheck.getUserType);
 
-module.exports = router;
+export default router;

@@ -1,15 +1,15 @@
-const Address = require("../models/Address");
-const ShippingInfo = require("../models/ShippingInfo");
-const Order = require("../models/Order");
-const mongoose = require("mongoose");
-const Cart = require("../models/Cart");
-const Product = require("../models/Product");
-const RecentActivity = require("../models/RecentActivity");
-const { customAlphabet } = require("nanoid");
-const orderIdNanoid = customAlphabet("0123456789", 5);
-const txnIdNanoid = customAlphabet("0123456789", 7);
-const SSLCommerzPayment = require("sslcommerz-lts");
-const SellerNotification = require("../models/SellerNotification");
+import Address from '../models/Address.js';
+import ShippingInfo from '../models/ShippingInfo.js';
+import Order from '../models/Order.js';
+import mongoose from 'mongoose';
+import Cart from '../models/Cart.js';
+import Product from '../models/Product.js';
+import RecentActivity from '../models/RecentActivity.js';
+import { customAlphabet } from 'nanoid';
+const orderIdNanoid = customAlphabet('0123456789', 5);
+const txnIdNanoid = customAlphabet('0123456789', 7);
+import SSLCommerzPayment from 'sslcommerz-lts';
+import SellerNotification from '../models/SellerNotification.js';
 const store_id = process.env.SSLCOMMERZ_STORE_ID;
 const store_passwd = process.env.SSLCOMMERZ_STORE_PASSWORD;
 const is_live = process.env.SSLCOMMERZ_IS_LIVE === "true";
@@ -30,7 +30,7 @@ const tempOrderSchema = new mongoose.Schema({
 const TempOrder =
   mongoose.models.TempOrder || mongoose.model("TempOrder", tempOrderSchema);
 
-exports.AddOrder = async (req, res) => {
+export const AddOrder = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
 
@@ -356,7 +356,7 @@ exports.AddOrder = async (req, res) => {
   }
 };
 
-exports.paymentSuccess = async (req, res) => {
+export const paymentSuccess = async (req, res) => {
   const { tran_id } = req.query;
   try {
     if (!tran_id || !tran_id.startsWith("temp_")) {
@@ -450,7 +450,7 @@ exports.paymentSuccess = async (req, res) => {
   }
 };
 
-exports.paymentFail = async (req, res) => {
+export const paymentFail = async (req, res) => {
   const { tran_id } = req.query;
 
   try {
@@ -511,11 +511,11 @@ exports.paymentFail = async (req, res) => {
   }
 };
 
-exports.paymentCancel = async (req, res) => {
-  return exports.paymentFail(req, res);
+export const paymentCancel = async (req, res) => {
+  return paymentFail(req, res);
 };
 
-exports.getAllOrders = async (req, res) => {
+export const getAllOrders = async (req, res) => {
   try {
     const { customer } = req;
 
@@ -563,7 +563,7 @@ exports.getAllOrders = async (req, res) => {
   }
 };
 
-exports.getSellerOrders = async (req, res) => {
+export const getSellerOrders = async (req, res) => {
   try {
     const { seller } = req;
 
@@ -617,7 +617,7 @@ exports.getSellerOrders = async (req, res) => {
   }
 };
 
-exports.getOrderById = async (req, res) => {
+export const getOrderById = async (req, res) => {
   try {
     const { id } = req.params;
     const sellerId = req.seller._id;
@@ -692,7 +692,7 @@ exports.getOrderById = async (req, res) => {
   }
 };
 
-exports.updateOrderStatus = async (req, res) => {
+export const updateOrderStatus = async (req, res) => {
   try {
     const { orderId } = req.params;
     const { orderStatus } = req.body;
@@ -779,7 +779,7 @@ exports.updateOrderStatus = async (req, res) => {
   }
 };
 
-exports.getOrderStatusCounts = async (req, res) => {
+export const getOrderStatusCounts = async (req, res) => {
   try {
     const { seller } = req;
     const { _id: sellerId } = seller;
@@ -828,7 +828,7 @@ exports.getOrderStatusCounts = async (req, res) => {
   }
 };
 
-exports.getAllPayments = async (req, res) => {
+export const getAllPayments = async (req, res) => {
   try {
     const { customer } = req;
     const customerId = customer?._id;

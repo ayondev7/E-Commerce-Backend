@@ -1,11 +1,11 @@
-const Cart = require("../models/Cart");
-const CartItem = require("../models/CartItem");
-const mongoose = require("mongoose");
-const Product = require("../models/Product");
-const Seller = require("../models/Seller");
-const Wishlist = require("../models/Wishlist");
+import Cart from '../models/Cart.js';
+import CartItem from '../models/CartItem.js';
+import mongoose from 'mongoose';
+import Product from '../models/Product.js';
+import Seller from '../models/Seller.js';
+import Wishlist from '../models/Wishlist.js';
 
-exports.addToCart = async (req, res) => {
+export const addToCart = async (req, res) => {
   try {
     const { customer } = req;
     const { _id: customerId } = customer;
@@ -82,7 +82,7 @@ exports.addToCart = async (req, res) => {
   }
 };
 
-exports.getCartItems = async (req, res) => {
+export const getCartItems = async (req, res) => {
   try {
     const { customer } = req;
     const { _id: customerId } = customer;
@@ -134,7 +134,7 @@ exports.getCartItems = async (req, res) => {
 };
 
 
-exports.removeFromCart = async (req, res) => {
+export const removeFromCart = async (req, res) => {
   try {
     const { customer, body } = req;
     const { _id: customerId } = customer;
@@ -213,7 +213,7 @@ exports.removeFromCart = async (req, res) => {
 };
 
 // New endpoint for updating cart item quantities
-exports.updateCartItemQuantity = async (req, res) => {
+export const updateCartItemQuantity = async (req, res) => {
   try {
     const { customer } = req;
     const { _id: customerId } = customer;

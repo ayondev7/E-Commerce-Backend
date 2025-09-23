@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const sellerNotificationSchema = new mongoose.Schema({
   notificationType: {
@@ -28,4 +28,4 @@ const sellerNotificationSchema = new mongoose.Schema({
   timestamps: true
 });
 
-module.exports = mongoose.model('SellerNotification', sellerNotificationSchema);
+export default mongoose.model('SellerNotification', sellerNotificationSchema);

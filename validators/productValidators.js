@@ -1,6 +1,6 @@
-const { body } = require('express-validator');
+import { body } from 'express-validator';
 
-const baseProductValidators = [
+export const baseProductValidators = [
   body('title').trim().notEmpty().withMessage('Title is required'),
   body('description').trim().notEmpty().withMessage('Description is required'),
   body('category').trim().notEmpty().withMessage('Category is required'),
@@ -51,6 +51,3 @@ const baseProductValidators = [
   }),
 ];
 
-module.exports = {
-  baseProductValidators,
-};

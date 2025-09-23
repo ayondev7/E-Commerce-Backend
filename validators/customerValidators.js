@@ -1,6 +1,6 @@
-const { body } = require('express-validator');
+import { body } from 'express-validator';
 
-const createCustomerValidators = [
+export const createCustomerValidators = [
   body('firstName').trim().notEmpty(),
   body('lastName').trim().notEmpty(),
   body('email').trim().isEmail().normalizeEmail(),
@@ -8,12 +8,8 @@ const createCustomerValidators = [
   body('phone').optional().trim(),
 ];
 
-const loginCustomerValidators = [
+export const loginCustomerValidators = [
   body('email').isEmail().normalizeEmail(),
   body('password').notEmpty(),
 ];
 
-module.exports = {
-  createCustomerValidators,
-  loginCustomerValidators,
-};

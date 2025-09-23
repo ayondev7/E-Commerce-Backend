@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const shippingInfoSchema = new mongoose.Schema(
   {
@@ -38,4 +38,4 @@ const shippingInfoSchema = new mongoose.Schema(
 
 const ShippingInfo = mongoose.model('ShippingInfo', shippingInfoSchema);
 
-module.exports = ShippingInfo;
+export default ShippingInfo;

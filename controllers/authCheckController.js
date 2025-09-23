@@ -1,8 +1,8 @@
-const jwt = require("jsonwebtoken");
-const Seller = require("../models/Seller");
-const Customer = require("../models/Customer");
+import jwt from 'jsonwebtoken';
+import Seller from '../models/Seller.js';
+import Customer from '../models/Customer.js';
 
-exports.getUserType = async (req, res) => {
+export const getUserType = async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith("Bearer ")) {

@@ -1,51 +1,80 @@
-const Seller = require("../models/Seller");
-const { validationResult } = require("express-validator");
-const { createSellerValidators, loginSellerValidators } = require('../validators/sellerValidators');
-const bcrypt = require("bcrypt");
-const jwt = require("jsonwebtoken");
-const sharp = require("sharp");
-const { uploadToImageKit } = require('../utils/imagekitClient');
-const SellerNotification = require("../models/SellerNotification");
-const Product = require("../models/Product");
-const Order = require("../models/Order");
+import Seller from '../models/Seller.js';
+import { validationResult } from 'express-validator';
+import { createSellerValidators, loginSellerValidators } from '../validators/sellerValidators.js';
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
+import sharp from 'sharp';
+import ImageKit from 'imagekit';
+import SellerNotification from '../models/SellerNotification.js';
+import Product from '../models/Product.js';
+import Order from '../models/Order.js';
 
+function getImageKitInstance() {
+  const { IMAGEKIT_PUBLIC_KEY, IMAGEKIT_PRIVATE_KEY, IMAGEKIT_URL_ENDPOINT } =
+    process.env;
+  if (!IMAGEKIT_PUBLIC_KEY || !IMAGEKIT_PRIVATE_KEY || !IMAGEKIT_URL_ENDPOINT) {
+    return null;
+  }
+  return new ImageKit({
+    publicKey: IMAGEKIT_PUBLIC_KEY,
+    privateKey: IMAGEKIT_PRIVATE_KEY,
+    urlEndpoint: IMAGEKIT_URL_ENDPOINT,
+  });
+}
 
-exports.createSeller = [
+export const createSeller = [
   ...createSellerValidators,
 
   async (req, res) => {
     try {
+      console.log('[createSeller] Incoming request body:', {
+        body: req.body,
+        file: req.file ? { originalname: req.file.originalname, size: req.file.size } : null,
+      });
+
+      console.log('[createSeller] ENV vars:', {
+        JWT_SECRET: !!process.env.JWT_SECRET,
+        IMAGEKIT_PUBLIC_KEY: !!process.env.IMAGEKIT_PUBLIC_KEY,
+        IMAGEKIT_PRIVATE_KEY: !!process.env.IMAGEKIT_PRIVATE_KEY,
+        IMAGEKIT_URL_ENDPOINT: !!process.env.IMAGEKIT_URL_ENDPOINT,
+      });
+
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
+        console.warn('[createSeller] Validation errors:', errors.array());
         return res.status(400).json({ errors: errors.array() });
       }
 
-      const { name, email, password } = req.body;
+      const { name, email, password, phone } = req.body;
 
       if (!req.file) {
+        console.warn('[createSeller] Missing req.file');
         return res.status(400).json({ error: "Seller image is required" });
       }
 
       const existingSeller = await Seller.findOne({ email });
+      console.log('[createSeller] existingSeller:', existingSeller ? existingSeller._id : null);
       if (existingSeller) {
         return res.status(400).json({ error: "Email already in use" });
       }
 
-      const processed = await sharp(req.file.buffer)
-        .webp({ lossless: true, effort: 4 })
-        .toBuffer();
-
-      // upload to ImageKit (guarded)
+      // upload to ImageKit (no webp conversion)
       let sellerImageUrl = null;
-      try {
-        const uploadResult = await uploadToImageKit({
-          file: processed,
-          fileName: `${Date.now()}_${req.file.originalname}.webp`,
-          useUniqueFileName: true,
-        });
-        sellerImageUrl = uploadResult?.url || null;
-      } catch (uploadErr) {
-        console.error('ImageKit upload error for seller image:', uploadErr);
+      const imageKit = getImageKitInstance();
+      console.log('[createSeller] imageKit instance available:', !!imageKit);
+      if (imageKit) {
+        try {
+          console.log('[createSeller] Attempting ImageKit upload with file size:', req.file.buffer?.length);
+          const uploadResult = await imageKit.upload({
+            file: req.file.buffer, // directly use buffer
+            fileName: `${name.replace(/\s+/g, "_")}_${Date.now()}`,
+            useUniqueFileName: true,
+          });
+          console.log('[createSeller] ImageKit uploadResult:', uploadResult && { url: uploadResult.url, fileId: uploadResult.fileId });
+          sellerImageUrl = uploadResult.url;
+        } catch (uploadErr) {
+          console.error("ImageKit upload error for seller image:", uploadErr && (uploadErr.stack || uploadErr));
+        }
       }
 
       const hashedPassword = await bcrypt.hash(password, 10);
@@ -53,12 +82,19 @@ exports.createSeller = [
       const seller = new Seller({
         name,
         email,
-        lastNotificationSeen:null,
+        phone,
+        lastNotificationSeen: null,
         password: hashedPassword,
         sellerImage: sellerImageUrl,
       });
 
-      await seller.save();
+      try {
+        await seller.save();
+        console.log('[createSeller] Seller saved with id:', seller._id);
+      } catch (saveErr) {
+        console.error('[createSeller] Error saving seller:', saveErr && (saveErr.stack || saveErr));
+        throw saveErr;
+      }
 
       const accessToken = jwt.sign(
         { sellerId: seller._id },
@@ -71,15 +107,16 @@ exports.createSeller = [
         sellerId: seller._id,
       });
     } catch (error) {
-      if (error.name === "ValidationError") {
+      console.error('[createSeller] Caught error:', error && (error.stack || error));
+      if (error && error.name === "ValidationError") {
         return res.status(400).json({ error: error.message });
       }
-      res.status(500).json({ error: "Server error" });
+      res.status(500).json({ error: "Server error", details: (error && error.message) || null });
     }
   },
 ];
 
-exports.loginSeller = [
+export const loginSeller = [
   ...loginSellerValidators,
 
   async (req, res) => {
@@ -96,7 +133,11 @@ exports.loginSeller = [
         return res.status(401).json({ error: "Invalid email" });
       }
 
-  const { password: hashedPassword, sellerImage, ...sellerData } = seller.toObject();
+      const {
+        password: hashedPassword,
+        sellerImage,
+        ...sellerData
+      } = seller.toObject();
 
       const isPasswordValid = await bcrypt.compare(password, hashedPassword);
       if (!isPasswordValid) {
@@ -105,11 +146,9 @@ exports.loginSeller = [
 
       const { _id: sellerId } = seller;
 
-      const accessToken = jwt.sign(
-        { sellerId },
-        process.env.JWT_SECRET,
-        { expiresIn: "3h" }
-      );
+      const accessToken = jwt.sign({ sellerId }, process.env.JWT_SECRET, {
+        expiresIn: "3h",
+      });
 
       res.status(200).json({
         accessToken,
@@ -121,7 +160,7 @@ exports.loginSeller = [
   },
 ];
 
-exports.getAllSellers = async (req, res) => {
+export const getAllSellers = async (req, res) => {
   try {
     const sellers = await Seller.find().select("-password");
 
@@ -139,7 +178,7 @@ exports.getAllSellers = async (req, res) => {
   }
 };
 
-exports.getSellerProfile = async (req, res) => {
+export const getSellerProfile = async (req, res) => {
   try {
     const { seller } = req;
 
@@ -168,7 +207,6 @@ exports.getSellerProfile = async (req, res) => {
         image: sellerImage || null,
       },
     });
-
   } catch (error) {
     console.error("Error fetching seller profile:", error);
     return res.status(500).json({
@@ -178,17 +216,19 @@ exports.getSellerProfile = async (req, res) => {
   }
 };
 
-exports.getSellerNotifications = async (req, res) => {
+export const getSellerNotifications = async (req, res) => {
   const sellerId = req.seller?._id;
 
   if (!sellerId) {
-    return res.status(401).json({ success: false, message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: "Unauthorized" });
   }
 
   const seller = await Seller.findById(sellerId);
   const lastSeenId = seller?.lastNotificationSeen;
 
-  const notifications = await SellerNotification.find({ sellerId }).sort({ createdAt: -1 });
+  const notifications = await SellerNotification.find({ sellerId }).sort({
+    createdAt: -1,
+  });
 
   const response = notifications.map((notification) => ({
     ...notification.toObject(),
@@ -198,22 +238,32 @@ exports.getSellerNotifications = async (req, res) => {
   res.status(200).json({ success: true, notifications: response });
 };
 
-exports.updateLastNotificationSeen = async (req, res) => {
+export const updateLastNotificationSeen = async (req, res) => {
   const sellerId = req.seller?._id;
   const { lastSeenNotificationId } = req.body;
 
   if (!sellerId || !lastSeenNotificationId) {
-    return res.status(400).json({ success: false, message: 'Missing seller ID or notification ID' });
+    return res
+      .status(400)
+      .json({
+        success: false,
+        message: "Missing seller ID or notification ID",
+      });
   }
 
   await Seller.findByIdAndUpdate(sellerId, {
     lastNotificationSeen: lastSeenNotificationId,
   });
 
-  res.status(200).json({ success: true, message: 'Last seen notification updated successfully' });
+  res
+    .status(200)
+    .json({
+      success: true,
+      message: "Last seen notification updated successfully",
+    });
 };
 
-exports.getSellerPayments = async (req, res) => {
+export const getSellerPayments = async (req, res) => {
   try {
     const { seller } = req;
     const sellerId = seller?._id;
@@ -222,7 +272,9 @@ exports.getSellerPayments = async (req, res) => {
       return res.status(400).json({ message: "Seller ID is required" });
     }
 
-    const sellerProducts = await Product.find({ sellerId }).select("_id title").lean();
+    const sellerProducts = await Product.find({ sellerId })
+      .select("_id title")
+      .lean();
 
     const productIdToTitleMap = {};
     const sellerProductIds = sellerProducts.map((product) => {
@@ -230,7 +282,9 @@ exports.getSellerPayments = async (req, res) => {
       return product._id;
     });
 
-    const orders = await Order.find({ productId: { $in: sellerProductIds } }).lean();
+    const orders = await Order.find({
+      productId: { $in: sellerProductIds },
+    }).lean();
 
     const payments = orders.map((order) => ({
       ...order,
@@ -244,36 +298,44 @@ exports.getSellerPayments = async (req, res) => {
   }
 };
 
-exports.guestSellerLogin = async (req, res) => {
+export const guestSellerLogin = async (req, res) => {
   try {
     const guestEmail = process.env.GUEST_SELLER_EMAIL;
     const guestPassword = process.env.GUEST_PASSWORD;
 
     if (!guestEmail || !guestPassword) {
-      return res.status(500).json({ error: 'Guest credentials are not configured' });
+      return res
+        .status(500)
+        .json({ error: "Guest credentials are not configured" });
     }
 
-    const seller = await Seller.findOne({ email: guestEmail }).select('+password');
+    const seller = await Seller.findOne({ email: guestEmail }).select(
+      "+password"
+    );
     if (!seller) {
-      return res.status(404).json({ error: 'Guest seller not found' });
+      return res.status(404).json({ error: "Guest seller not found" });
     }
 
     const isMatch = await bcrypt.compare(guestPassword, seller.password);
     if (!isMatch) {
-      return res.status(401).json({ error: 'Guest authentication failed' });
+      return res.status(401).json({ error: "Guest authentication failed" });
     }
 
-    const { password: hashedPassword, sellerImage, ...sellerData } = seller.toObject();
+    const {
+      password: hashedPassword,
+      sellerImage,
+      ...sellerData
+    } = seller.toObject();
 
     const accessToken = jwt.sign(
       { sellerId: seller._id },
       process.env.JWT_SECRET,
-      { expiresIn: '3h' }
+      { expiresIn: "3h" }
     );
 
     return res.status(200).json({ accessToken, seller: sellerData });
   } catch (error) {
-    console.error('Guest seller login error:', error);
-    return res.status(500).json({ error: 'Server error' });
+    console.error("Guest seller login error:", error);
+    return res.status(500).json({ error: "Server error" });
   }
 };

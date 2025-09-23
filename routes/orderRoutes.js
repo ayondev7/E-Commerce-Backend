@@ -1,7 +1,7 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const auth = require('../middleware/auth');
-const orderController = require('../controllers/orderController');
+import auth from '../middleware/auth.js';
+import * as orderController from '../controllers/orderController.js';
 
 router.post('/add-order', auth, orderController.AddOrder);
 
@@ -17,4 +17,4 @@ router.patch('/update-status/:orderId', auth, orderController.updateOrderStatus)
 
 router.get('/get-order-status-counts', auth, orderController.getOrderStatusCounts);
 
-module.exports = router;
+export default router;

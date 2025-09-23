@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const recentActivitySchema = new mongoose.Schema(
   {
@@ -33,4 +33,4 @@ const recentActivitySchema = new mongoose.Schema(
 
 const RecentActivity = mongoose.model('RecentActivity', recentActivitySchema);
 
-module.exports = RecentActivity;
+export default RecentActivity;

@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const cartItemSchema = new mongoose.Schema({
   customerId: {
@@ -24,4 +24,4 @@ const cartItemSchema = new mongoose.Schema({
 // Ensure unique combination of customer and product
 cartItemSchema.index({ customerId: 1, productId: 1 }, { unique: true });
 
-module.exports = mongoose.model('CartItem', cartItemSchema);
+export default mongoose.model('CartItem', cartItemSchema);

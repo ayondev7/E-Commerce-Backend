@@ -1,13 +1,13 @@
-const Customer = require("../models/Customer");
-const { validationResult } = require("express-validator");
-const { uploadToImageKit } = require('../utils/imagekitClient');
-const { createCustomerValidators, loginCustomerValidators } = require('../validators/customerValidators');
-const bcrypt = require("bcrypt");
-const jwt = require("jsonwebtoken");
-const sharp = require("sharp");
-const Order = require("../models/Order");
-const Wishlist = require("../models/Wishlist");
-const RecentActivity = require("../models/RecentActivity");
+import Customer from '../models/Customer.js';
+import { validationResult } from 'express-validator';
+import { uploadToImageKit } from '../utils/imagekitClient.js';
+import { createCustomerValidators, loginCustomerValidators } from '../validators/customerValidators.js';
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
+import sharp from 'sharp';
+import Order from '../models/Order.js';
+import Wishlist from '../models/Wishlist.js';
+import RecentActivity from '../models/RecentActivity.js';
 
 const buildCustomerPayload = async ({ firstName, lastName, email, password, phone, bio }, file) => {
   let customerImage = undefined;
@@ -39,7 +39,7 @@ const buildCustomerPayload = async ({ firstName, lastName, email, password, phon
   };
 };
 
-exports.createCustomer = [
+export const createCustomer = [
   ...createCustomerValidators,
 
   async (req, res) => {
@@ -73,7 +73,7 @@ exports.createCustomer = [
   }
 ];
 
-exports.loginCustomer = [
+export const loginCustomer = [
   ...loginCustomerValidators,
 
   async (req, res) => {
@@ -116,7 +116,7 @@ exports.loginCustomer = [
   }
 ];
 
-exports.getCustomerProfileInfo = async (req, res) => {
+export const getCustomerProfileInfo = async (req, res) => {
   try {
     const customer = await Customer.findById(req.customer._id)
       .select('-password -__v')
@@ -143,7 +143,7 @@ exports.getCustomerProfileInfo = async (req, res) => {
   }
 };
 
-exports.getCustomerProfile = async (req, res) => {
+export const getCustomerProfile = async (req, res) => {
   try {
     const { customer } = req;
 
@@ -184,7 +184,7 @@ exports.getCustomerProfile = async (req, res) => {
 };
 
 
-exports.updateCustomer = async (req, res) => {
+export const updateCustomer = async (req, res) => {
   try {
     const updates = { ...req.body };
 
@@ -225,7 +225,7 @@ exports.updateCustomer = async (req, res) => {
   }
 };
 
-exports.getAllCustomers = async (req, res) => {
+export const getAllCustomers = async (req, res) => {
   try {
     const customers = await Customer.find().select("-password");
 
@@ -243,7 +243,7 @@ exports.getAllCustomers = async (req, res) => {
   }
 };
 
-exports.getCustomerStats = async (req, res) => {
+export const getCustomerStats = async (req, res) => {
   try {
     const { customer } = req;
     const { _id: customerId } = customer;
@@ -270,7 +270,7 @@ exports.getCustomerStats = async (req, res) => {
   }
 };
 
-exports.getActivitiesByCustomer = async (req, res) => {
+export const getActivitiesByCustomer = async (req, res) => {
   try {
     const { customer } = req;
     const customerId = customer?._id;
@@ -288,7 +288,7 @@ exports.getActivitiesByCustomer = async (req, res) => {
   }
 };
 
-exports.getAllNotifications = async (req, res) => {
+export const getAllNotifications = async (req, res) => {
   try {
     const { customer } = req;
     const customerId = customer?._id;
@@ -314,7 +314,7 @@ exports.getAllNotifications = async (req, res) => {
   }
 };
 
-exports.markNotificationsAsSeen = async (req, res) => {
+export const markNotificationsAsSeen = async (req, res) => {
   try {
     const { customer } = req;
     const { notificationId } = req.body;
@@ -338,7 +338,7 @@ exports.markNotificationsAsSeen = async (req, res) => {
   }
 };
 
-exports.guestCustomerLogin = async (req, res) => {
+export const guestCustomerLogin = async (req, res) => {
   try {
     const guestEmail = process.env.GUEST_CUSTOMER_EMAIL;
     const guestPassword = process.env.GUEST_PASSWORD;

@@ -1,7 +1,7 @@
-const Address = require('../models/Address');
-const mongoose = require('mongoose');
+import Address from '../models/Address.js';
+import mongoose from 'mongoose';
 
-exports.addAddress = async (req, res) => {
+export const addAddress = async (req, res) => {
   try {
     const { addressLine, city, zipCode, country, state, isDefault, name } = req.body;
 
@@ -29,7 +29,7 @@ exports.addAddress = async (req, res) => {
   }
 };
 
-exports.getAllAddresses = async (req, res) => {
+export const getAllAddresses = async (req, res) => {
   try {
     const addresses = await Address.find({ customerId: req.customer._id }).sort({ isDefault: -1 });
     res.status(200).json(addresses);
@@ -38,7 +38,7 @@ exports.getAllAddresses = async (req, res) => {
   }
 };
 
-exports.updateAddress = async (req, res) => {
+export const updateAddress = async (req, res) => {
   try {
     const addressId = req.params.id;
     const updates = req.body;
@@ -57,7 +57,7 @@ exports.updateAddress = async (req, res) => {
   }
 };
 
-exports.deleteAddress = async (req, res) => {
+export const deleteAddress = async (req, res) => {
   try {
     const addressId = req.params.id;
 
@@ -74,7 +74,7 @@ exports.deleteAddress = async (req, res) => {
   }
 };
 
-exports.setDefaultAddress = async (req, res) => {
+export const setDefaultAddress = async (req, res) => {
   try {
     const addressId = req.params.id;
     await Address.updateMany(

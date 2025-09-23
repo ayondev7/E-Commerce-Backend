@@ -1,6 +1,6 @@
-const express = require('express');
-const auth = require('../middleware/auth');
-const addressController = require('../controllers/addressController');
+import express from 'express';
+import auth from '../middleware/auth.js';
+import * as addressController from '../controllers/addressController.js';
 
 const router = express.Router();
 
@@ -10,4 +10,4 @@ router.patch('/:id', auth, addressController.updateAddress);
 router.delete('/:id', auth, addressController.deleteAddress);
 router.patch('/default/:id', auth, addressController.setDefaultAddress);
 
-module.exports = router;
+export default router;

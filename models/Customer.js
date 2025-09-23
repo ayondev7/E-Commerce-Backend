@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const customerSchema = new mongoose.Schema({
   firstName: {
@@ -48,10 +48,11 @@ const customerSchema = new mongoose.Schema({
     required: true,
   },
   customerImage: {
-    type: String
+    type: String,
+    required: true,
   }
 }, {
   timestamps: true
 });
 
-module.exports = mongoose.model('Customer', customerSchema);
+export default mongoose.model('Customer', customerSchema);

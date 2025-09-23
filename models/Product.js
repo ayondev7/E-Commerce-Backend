@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const productSchema = new mongoose.Schema({
   title: { type: String, required: true, trim: true },
@@ -43,4 +43,4 @@ productSchema.path('productImages').validate(function (value) {
   return Array.isArray(value) ? value.length <= 4 : true;
 }, 'A product can have at most 4 images.');
 
-module.exports = mongoose.model('Product', productSchema);
+export default mongoose.model('Product', productSchema);

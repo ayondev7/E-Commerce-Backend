@@ -1,4 +1,4 @@
-const ImageKit = require('imagekit');
+import ImageKit from 'imagekit';
 
 function extractImageKitIdFromUrl(url) {
   try {
@@ -40,11 +40,11 @@ function createImageKit() {
 
 const imageKitInstance = createImageKit();
 
-function getImageKitInstance() {
+export function getImageKitInstance() {
   return imageKitInstance;
 }
 
-async function uploadToImageKit({ file, fileName, useUniqueFileName = true }) {
+export async function uploadToImageKit({ file, fileName, useUniqueFileName = true }) {
   const ik = getImageKitInstance();
   if (!ik) return null;
 
@@ -63,5 +63,3 @@ async function uploadToImageKit({ file, fileName, useUniqueFileName = true }) {
     throw err;
   }
 }
-
-module.exports = { getImageKitInstance, uploadToImageKit };

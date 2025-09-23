@@ -1,9 +1,9 @@
-const express = require("express");
+import express from 'express';
 const router = express.Router();
-const productController = require("../controllers/productController");
-const auth = require("../middleware/auth");
-const multer = require("multer");
-const path = require("path");
+import * as productController from '../controllers/productController.js';
+import auth from '../middleware/auth.js';
+import multer from 'multer';
+import path from 'path';
 
 const storage = multer.memoryStorage();
 
@@ -53,4 +53,4 @@ router.patch(
 
 router.delete("/delete/:id", auth, productController.deleteProduct);
 
-module.exports = router;
+export default router;

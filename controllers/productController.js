@@ -1,13 +1,14 @@
-const Product = require("../models/Product");
-const { validationResult } = require("express-validator");
-const { baseProductValidators } = require('../validators/productValidators');
-const sharp = require("sharp");
-const crypto = require("crypto");
-const fs = require("fs").promises;
-const path = require("path");
-const { uploadToImageKit } = require('../utils/imagekitClient');
+import Product from '../models/Product.js';
+import { validationResult } from 'express-validator';
+import { baseProductValidators } from '../validators/productValidators.js';
+import sharp from 'sharp';
+import crypto from 'crypto';
+import fs from 'fs';
+const fsp = fs.promises;
+import path from 'path';
+import { uploadToImageKit } from '../utils/imagekitClient.js';
 
-exports.createProduct = [
+export const createProduct = [
   ...baseProductValidators,
 
   async (req, res) => {
@@ -119,7 +120,7 @@ exports.createProduct = [
   },
 ];
 
-exports.getAllProducts = async (req, res) => {
+export const getAllProducts = async (req, res) => {
   if (!req.seller || !req.seller._id) {
     return res.status(403).json({ error: "Unauthorized!" });
   }
@@ -155,7 +156,7 @@ exports.getAllProducts = async (req, res) => {
   }
 };
 
-exports.getAllProductsById = async (req, res) => {
+export const getAllProductsById = async (req, res) => {
   try {
     const { products } = req.body;
 
@@ -203,7 +204,7 @@ exports.getAllProductsById = async (req, res) => {
 };
 
 // Product endpoints for frontend consumption
-exports.getAllProductsForShop = async (req, res) => {
+export const getAllProductsForShop = async (req, res) => {
   try {
     const {
       page = 1,
@@ -296,7 +297,7 @@ exports.getAllProductsForShop = async (req, res) => {
   }
 };
 
-exports.getProductDetails = async (req, res) => {
+export const getProductDetails = async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -355,7 +356,7 @@ exports.getProductDetails = async (req, res) => {
   }
 };
 
-exports.searchProducts = async (req, res) => {
+export const searchProducts = async (req, res) => {
   if (!req.seller && !req.customer) {
     return res.status(403).json({ error: "Unauthorized!" });
   }
@@ -398,7 +399,7 @@ exports.searchProducts = async (req, res) => {
   }
 };
 
-exports.getSingleProduct = async (req, res) => {
+export const getSingleProduct = async (req, res) => {
   try {
     const { id } = req.params;
     const sellerId = req.seller?._id;
@@ -438,7 +439,7 @@ exports.getSingleProduct = async (req, res) => {
   }
 };
 
-exports.deleteProduct = async (req, res) => {
+export const deleteProduct = async (req, res) => {
   try {
     const { seller } = req;
     const { _id: sellerId } = seller;
@@ -466,7 +467,7 @@ exports.deleteProduct = async (req, res) => {
   }
 };
 
-exports.getProductsByCategory = async (req, res) => {
+export const getProductsByCategory = async (req, res) => {
   try {
     const { category } = req.params;
     const { page = 1, limit = 10 } = req.query;
@@ -511,7 +512,7 @@ exports.getProductsByCategory = async (req, res) => {
   }
 };
 
-exports.getProductStats = async (req, res) => {
+export const getProductStats = async (req, res) => {
   try {
     const stats = await Product.aggregate([
       { $match: { sellerId: req.sellerId } },
@@ -594,7 +595,7 @@ async function cleanupFiles(files = []) {
   );
 }
 
-exports.updateProduct = async (req, res) => {
+export const updateProduct = async (req, res) => {
   try {
     const { productId, retainedImageHashes = [] } = req.body;
 

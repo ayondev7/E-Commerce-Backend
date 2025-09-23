@@ -1,9 +1,9 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const customerController = require('../controllers/customerController');
-const auth = require('../middleware/auth');
-const multer = require('multer');
-const path = require('path');
+import * as customerController from '../controllers/customerController.js';
+import auth from '../middleware/auth.js';
+import multer from 'multer';
+import path from 'path';
 
 const storage = multer.memoryStorage();
 const upload = multer({
@@ -43,4 +43,4 @@ router.get('/profile', auth, customerController.getCustomerProfileInfo);
 
 router.patch('/update', auth, upload.single('customerImage'), customerController.updateCustomer);
 
-module.exports = router;
+export default router;

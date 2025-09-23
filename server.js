@@ -1,8 +1,10 @@
-require("dotenv").config();
-const express = require("express");
-const mongoose = require("mongoose");
-const cors = require("cors");
-const path = require("path");
+import 'dotenv/config';
+import express from 'express';
+import mongoose from 'mongoose';
+import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 
 const app = express();
 
@@ -28,7 +30,9 @@ app.use((req, res, next) => {
 });
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+app.use('/uploads', express.static(join(__dirname, 'uploads')));
 
 const routes = [
   { path: "/api/sellers", module: "./routes/sellerRoutes" },
@@ -42,9 +46,14 @@ const routes = [
   { path: "/api/payment", module: "./routes/paymentRoutes" },
 ];
 
-routes.forEach(({ path, module }) => {
-  app.use(path, require(module));
-});
+(async () => {
+  for (const { path: routePath, module } of routes) {
+    const mod = await import(module + '.js');
+    // many route files export the router as default or module.exports = router
+    const router = mod.default || mod.router || mod;
+    app.use(routePath, router);
+  }
+})();
 
 app.use((err, req, res, next) => {
   console.error("Unhandled error:", err);
