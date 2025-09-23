@@ -9,9 +9,9 @@ const storage = multer.memoryStorage();
 
 const upload = multer({
   storage: storage,
-  limits: { 
-    fileSize: 5 * 1024 * 1024,       
-    fieldSize: 25 * 1024 * 1024  
+  limits: {
+    fileSize: 5 * 1024 * 1024,
+    fieldSize: 25 * 1024 * 1024,
   },
   fileFilter: (req, file, cb) => {
     const filetypes = /jpeg|jpg|png|webp/;
@@ -35,6 +35,8 @@ router.post(
 );
 
 router.get("/get-all", auth, productController.getAllProducts);
+router.get("/shop/get-all", productController.getAllProductsForShop);
+router.get("/shop/get-product/:id", productController.getProductDetails);
 
 router.post("/get-all-by-id", auth, productController.getAllProductsById);
 

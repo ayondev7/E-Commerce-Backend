@@ -1,4 +1,5 @@
 const Cart = require("../models/Cart");
+const CartItem = require("../models/CartItem");
 const mongoose = require("mongoose");
 const Product = require("../models/Product");
 const Seller = require("../models/Seller");
@@ -211,6 +212,59 @@ exports.removeFromCart = async (req, res) => {
     });
   } catch (error) {
     console.error("Remove cart item error:", error);
+    res.status(500).json({ error: "Server error" });
+  }
+};
+
+// New endpoint for updating cart item quantities
+exports.updateCartItemQuantity = async (req, res) => {
+  try {
+    const { customer } = req;
+    const { _id: customerId } = customer;
+    const { id, quantity } = req.body;
+
+    if (!id || !quantity) {
+      return res.status(400).json({ error: "Product ID and quantity are required" });
+    }
+
+    if (quantity < 1) {
+      return res.status(400).json({ error: "Quantity must be at least 1" });
+    }
+
+    // Find or create cart item
+    let cartItem = await CartItem.findOne({ 
+      customerId, 
+      productId: id 
+    });
+
+    if (!cartItem) {
+      // Create new cart item if it doesn't exist
+      cartItem = new CartItem({
+        customerId,
+        productId: id,
+        quantity
+      });
+    } else {
+      // Update existing cart item
+      cartItem.quantity = quantity;
+    }
+
+    await cartItem.save();
+
+    res.status(200).json({
+      message: "Cart item quantity updated successfully",
+      cartItem: {
+        _id: cartItem._id,
+        productId: cartItem.productId,
+        quantity: cartItem.quantity
+      }
+    });
+
+  } catch (error) {
+    console.error("Update cart item quantity error:", error);
+    if (error.code === 11000) {
+      return res.status(400).json({ error: "Cart item already exists" });
+    }
     res.status(500).json({ error: "Server error" });
   }
 };

@@ -255,6 +255,164 @@ exports.getAllProductsById = async (req, res) => {
   }
 };
 
+// Product endpoints for frontend consumption
+exports.getAllProductsForShop = async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 20,
+      category,
+      priceMin,
+      priceMax,
+      sortBy = 'newest'
+    } = req.query;
+
+    // Build filter query
+    const filter = {};
+    if (category) {
+      filter.category = { $regex: category, $options: 'i' };
+    }
+    if (priceMin || priceMax) {
+      filter.price = {};
+      if (priceMin) filter.price.$gte = Number(priceMin);
+      if (priceMax) filter.price.$lte = Number(priceMax);
+    }
+
+    // Build sort query
+    let sort = {};
+    switch (sortBy) {
+      case 'price_asc':
+        sort = { price: 1 };
+        break;
+      case 'price_desc':
+        sort = { price: -1 };
+        break;
+      case 'name_asc':
+        sort = { title: 1 };
+        break;
+      case 'name_desc':
+        sort = { title: -1 };
+        break;
+      case 'newest':
+      default:
+        sort = { createdAt: -1 };
+        break;
+    }
+
+    // Calculate pagination
+    const skip = (Number(page) - 1) * Number(limit);
+    
+    const [products, totalCount] = await Promise.all([
+      Product.find(filter)
+        .sort(sort)
+        .skip(skip)
+        .limit(Number(limit))
+        .select('title sku price quantity category model colour productImages'),
+      Product.countDocuments(filter)
+    ]);
+
+    const formattedProducts = products.map((product) => {
+      let status = "active";
+      if (product.quantity === 0) {
+        status = "out-of-stock";
+      } else if (product.quantity <= 10) {
+        status = "low-stock";
+      }
+
+      return {
+        _id: product._id,
+        image: product.productImages?.[0] 
+          ? `data:image/webp;base64,${product.productImages[0].toString("base64")}`
+          : null,
+        title: product.title,
+        sku: product.sku,
+        price: product.price,
+        quantity: product.quantity,
+        category: product.category,
+        model: product.model,
+        colour: product.colour,
+        status
+      };
+    });
+
+    res.status(200).json({
+      products: formattedProducts,
+      pagination: {
+        currentPage: Number(page),
+        totalPages: Math.ceil(totalCount / Number(limit)),
+        totalProducts: totalCount,
+        hasNextPage: skip + Number(limit) < totalCount,
+        hasPrevPage: Number(page) > 1
+      }
+    });
+  } catch (error) {
+    console.error("Get shop products error:", error);
+    res.status(500).json({ error: "Server error" });
+  }
+};
+
+exports.getProductDetails = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const product = await Product.findById(id);
+
+    if (!product) {
+      return res.status(404).json({ error: "Product not found" });
+    }
+
+    const productObj = product.toObject();
+
+    // Convert productImages to base64 strings
+    productObj.productImageStrings = productObj.productImages.map((img) =>
+      img ? `data:image/webp;base64,${img.toString("base64")}` : null
+    );
+
+    // Remove the original productImages buffer data
+    delete productObj.productImages;
+
+    // Convert specifications array to the expected format
+    if (productObj.specifications && Array.isArray(productObj.specifications)) {
+      productObj.specifications = productObj.specifications.map(spec => 
+        typeof spec === 'object' && spec.label && spec.value 
+          ? `${spec.label}: ${spec.value}`
+          : spec
+      );
+    }
+
+    // Ensure all required fields are present and properly formatted
+    const response = {
+      _id: productObj._id,
+      title: productObj.title,
+      description: productObj.description,
+      productImages: [], // Empty array as requested
+      productImageStrings: productObj.productImageStrings,
+      category: productObj.category,
+      brand: productObj.brand,
+      model: productObj.model,
+      storage: productObj.storage,
+      colour: productObj.colour,
+      ram: productObj.ram,
+      conditions: productObj.conditions || [],
+      features: productObj.features || [],
+      specifications: productObj.specifications || [],
+      price: productObj.price,
+      salePrice: productObj.salePrice || productObj.price,
+      quantity: productObj.quantity,
+      sku: productObj.sku,
+      negotiable: productObj.negotiable || false,
+      tags: productObj.tags || [],
+      seoTitle: productObj.seoTitle || "",
+      seoDescription: productObj.seoDescription || ""
+    };
+
+    return res.status(200).json(response);
+  } catch (error) {
+    console.error("Error fetching product details:", error);
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
 exports.searchProducts = async (req, res) => {
   if (!req.seller && !req.customer) {
     return res.status(403).json({ error: "Unauthorized!" });
