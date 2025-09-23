@@ -35,8 +35,8 @@ router.post(
 );
 
 router.get("/get-all", auth, productController.getAllProducts);
-router.get("/shop/get-all", productController.getAllProductsForShop);
-router.get("/shop/get-product/:id", productController.getProductDetails);
+router.get("/shop/get-all", auth, productController.getAllProductsForShop);
+router.get("/shop/get-product/:id", auth, productController.getProductDetails);
 
 router.post("/get-all-by-id", auth, productController.getAllProductsById);
 

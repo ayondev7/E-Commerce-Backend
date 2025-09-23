@@ -82,6 +82,47 @@ export const addToCart = async (req, res) => {
   }
 };
 
+export const addProductDirect = async (req, res) => {
+  try {
+    const { customer } = req;
+    const customerId = customer?._id;
+    const { productId } = req.body;
+
+    if (!customerId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    if (!productId) {
+      return res.status(400).json({ error: 'productId is required' });
+    }
+
+    const product = await Product.findById(productId).select('category');
+    if (!product) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
+
+    const title = product.category || '';
+
+    // Find existing cart with same title for this customer or create new
+    let cart = await Cart.findOne({ customerId, title });
+    if (!cart) {
+      cart = new Cart({ customerId, title, productIds: [] });
+    }
+
+    if (cart.productIds.map(String).includes(String(productId))) {
+      return res.status(200).json({ message: 'Product already in cart' });
+    }
+
+    cart.productIds.push(productId);
+    await cart.save();
+
+    return res.status(201).json({ message: 'Product added to cart', cartId: cart._id });
+  } catch (error) {
+    console.error('addProductDirect error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
 export const getCartItems = async (req, res) => {
   try {
     const { customer } = req;
@@ -96,13 +137,14 @@ export const getCartItems = async (req, res) => {
     let totalProductsCount = 0;
 
     for (const cart of carts) {
-      const title = cart.title;
-      if (!title) continue;
+      const title = cart.title && cart.title.trim() ? cart.title.trim() : null;
+      const groupKey = title || `cart_${cart._id.toString()}`;
 
-      if (!grouped[title]) {
-        grouped[title] = {
-          title,
-          _id: cart._id, 
+      if (!grouped[groupKey]) {
+        grouped[groupKey] = {
+          // Display an empty string when title is missing to match frontend expectations
+          title: title || '',
+          _id: cart._id,
           products: [],
         };
       }
@@ -117,7 +159,7 @@ export const getCartItems = async (req, res) => {
         image: product.productImages?.length > 0 ? product.productImages[0] : null,
       }));
 
-      grouped[title].products.push(...products);
+      grouped[groupKey].products.push(...products);
       totalProductsCount += products.length;
     }
 

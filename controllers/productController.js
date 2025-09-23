@@ -1,15 +1,17 @@
-import Product from '../models/Product.js';
-import { validationResult } from 'express-validator';
-import { baseProductValidators } from '../validators/productValidators.js';
-import sharp from 'sharp';
-import ImageKit from 'imagekit';
-import crypto from 'crypto';
-import fs from 'fs';
+import Product from "../models/Product.js";
+import Wishlist from "../models/Wishlist.js";
+import { validationResult } from "express-validator";
+import { baseProductValidators } from "../validators/productValidators.js";
+import sharp from "sharp";
+import ImageKit from "imagekit";
+import crypto from "crypto";
+import fs from "fs";
 const fsp = fs.promises;
-import path from 'path';
+import path from "path";
 
 function getImageKitInstance() {
-  const { IMAGEKIT_PUBLIC_KEY, IMAGEKIT_PRIVATE_KEY, IMAGEKIT_URL_ENDPOINT } = process.env;
+  const { IMAGEKIT_PUBLIC_KEY, IMAGEKIT_PRIVATE_KEY, IMAGEKIT_URL_ENDPOINT } =
+    process.env;
   if (!IMAGEKIT_PUBLIC_KEY || !IMAGEKIT_PRIVATE_KEY || !IMAGEKIT_URL_ENDPOINT) {
     return null;
   }
@@ -61,12 +63,18 @@ export const createProduct = [
                 fileName,
                 useUniqueFileName: true,
               });
-              if (uploadResult && uploadResult.url) productImages.push(uploadResult.url);
+              if (uploadResult && uploadResult.url)
+                productImages.push(uploadResult.url);
             } catch (uploadErr) {
-              console.error('ImageKit upload error for product image:', uploadErr);
+              console.error(
+                "ImageKit upload error for product image:",
+                uploadErr
+              );
             }
           } else {
-            console.warn('ImageKit not configured; skipping product image upload');
+            console.warn(
+              "ImageKit not configured; skipping product image upload"
+            );
           }
         }
       }
@@ -210,7 +218,7 @@ export const getAllProductsById = async (req, res) => {
         quantity,
         colour: dbProduct.colour,
         model: dbProduct.model,
-    image: dbProduct.productImages?.[0] || null,
+        image: dbProduct.productImages?.[0] || null,
       };
     });
 
@@ -228,38 +236,63 @@ export const getAllProductsForShop = async (req, res) => {
       page = 1,
       limit = 20,
       category,
+      priceRange,
       priceMin,
       priceMax,
-      sortBy = 'newest'
+      sortBy = "newest",
     } = req.query;
 
     // Build filter query
     const filter = {};
     if (category) {
-      filter.category = { $regex: category, $options: 'i' };
+      filter.category = { $regex: category, $options: "i" };
     }
-    if (priceMin || priceMax) {
+
+    // priceRange can be provided as "min-max" or JSON like [min,max]
+    let parsedPriceMin = priceMin;
+    let parsedPriceMax = priceMax;
+    if (priceRange) {
+      try {
+        if (typeof priceRange === "string" && priceRange.includes("-")) {
+          const parts = priceRange.split("-").map((p) => p.trim());
+          if (parts[0]) parsedPriceMin = parts[0];
+          if (parts[1]) parsedPriceMax = parts[1];
+        } else {
+          const parsed = JSON.parse(priceRange);
+          if (Array.isArray(parsed)) {
+            parsedPriceMin = parsed[0];
+            parsedPriceMax = parsed[1];
+          }
+        }
+      } catch (err) {
+        // ignore parse errors and fallback to individual params
+      }
+    }
+
+    if (parsedPriceMin || parsedPriceMax) {
       filter.price = {};
-      if (priceMin) filter.price.$gte = Number(priceMin);
-      if (priceMax) filter.price.$lte = Number(priceMax);
+      if (parsedPriceMin !== undefined && parsedPriceMin !== "")
+        filter.price.$gte = Number(parsedPriceMin);
+      if (parsedPriceMax !== undefined && parsedPriceMax !== "")
+        filter.price.$lte = Number(parsedPriceMax);
     }
 
     // Build sort query
     let sort = {};
     switch (sortBy) {
-      case 'price_asc':
+      case "price_asc":
         sort = { price: 1 };
         break;
-      case 'price_desc':
+      case "price_desc":
         sort = { price: -1 };
         break;
-      case 'name_asc':
+      case "name_asc":
         sort = { title: 1 };
         break;
-      case 'name_desc':
+      case "name_desc":
         sort = { title: -1 };
         break;
-      case 'newest':
+      case "newest":
       default:
         sort = { createdAt: -1 };
         break;
@@ -267,14 +300,20 @@ export const getAllProductsForShop = async (req, res) => {
 
     // Calculate pagination
     const skip = (Number(page) - 1) * Number(limit);
-    
-    const [products, totalCount] = await Promise.all([
+
+    const [products, totalCount, categoriesAgg] = await Promise.all([
       Product.find(filter)
         .sort(sort)
         .skip(skip)
         .limit(Number(limit))
-        .select('title sku price quantity category model colour productImages'),
-      Product.countDocuments(filter)
+        .select("title sku price quantity category model colour productImages"),
+      Product.countDocuments(filter),
+      // Get distinct categories for UI (optional)
+      Product.aggregate([
+        { $match: filter },
+        { $group: { _id: { $ifNull: ["$category", ""] } } },
+        { $sort: { _id: 1 } },
+      ]),
     ]);
 
     const formattedProducts = products.map((product) => {
@@ -295,19 +334,42 @@ export const getAllProductsForShop = async (req, res) => {
         category: product.category,
         model: product.model,
         colour: product.colour,
-        status
+        status,
+        // placeholder for isWishlisted; will be set below if customer present
+        isWishlisted: false,
       };
     });
 
+    // If a customer is present, fetch their wishlist product IDs and mark products
+    try {
+      const customerId = req.customer?._id;
+      if (customerId) {
+        const wishlists = await Wishlist.find({ customerId }).select(
+          "productIds"
+        );
+        const wishlistedIds = new Set(
+          wishlists.flatMap((w) => (Array.isArray(w.productIds) ? w.productIds : []))
+            .map((id) => id && id.toString())
+        );
+
+        formattedProducts.forEach((p) => {
+          if (p && p._id && wishlistedIds.has(p._id.toString())) {
+            p.isWishlisted = true;
+          }
+        });
+      }
+    } catch (wishErr) {
+      console.error("Error fetching wishlists:", wishErr);
+    }
+
+    const categories = Array.isArray(categoriesAgg)
+      ? categoriesAgg.map((c) => (c._id ? c._id : null)).filter(Boolean)
+      : undefined;
+
     res.status(200).json({
       products: formattedProducts,
-      pagination: {
-        currentPage: Number(page),
-        totalPages: Math.ceil(totalCount / Number(limit)),
-        totalProducts: totalCount,
-        hasNextPage: skip + Number(limit) < totalCount,
-        hasPrevPage: Number(page) > 1
-      }
+      total: totalCount,
+      categories: categories && categories.length > 0 ? categories : undefined,
     });
   } catch (error) {
     console.error("Get shop products error:", error);
@@ -328,14 +390,16 @@ export const getProductDetails = async (req, res) => {
     const productObj = product.toObject();
 
     // productImages already stores URLs; copy to productImageStrings for frontend
-    productObj.productImageStrings = productObj.productImages.map((img) => img || null);
+    productObj.productImageStrings = productObj.productImages.map(
+      (img) => img || null
+    );
 
     // Do not keep raw productImages buffers (now URLs)
 
     // Convert specifications array to the expected format
     if (productObj.specifications && Array.isArray(productObj.specifications)) {
-      productObj.specifications = productObj.specifications.map(spec => 
-        typeof spec === 'object' && spec.label && spec.value 
+      productObj.specifications = productObj.specifications.map((spec) =>
+        typeof spec === "object" && spec.label && spec.value
           ? `${spec.label}: ${spec.value}`
           : spec
       );
@@ -346,8 +410,8 @@ export const getProductDetails = async (req, res) => {
       _id: productObj._id,
       title: productObj.title,
       description: productObj.description,
-  productImages: [], // Empty array as requested
-  productImageStrings: productObj.productImageStrings,
+      productImages: [], // Empty array as requested
+      productImageStrings: productObj.productImageStrings,
       category: productObj.category,
       brand: productObj.brand,
       model: productObj.model,
@@ -364,7 +428,7 @@ export const getProductDetails = async (req, res) => {
       negotiable: productObj.negotiable || false,
       tags: productObj.tags || [],
       seoTitle: productObj.seoTitle || "",
-      seoDescription: productObj.seoDescription || ""
+      seoDescription: productObj.seoDescription || "",
     };
 
     return res.status(200).json(response);
@@ -437,7 +501,9 @@ export const getSingleProduct = async (req, res) => {
 
     const productObj = product.toObject();
 
-    productObj.productImageStrings = productObj.productImages.map((img) => img || null);
+    productObj.productImageStrings = productObj.productImages.map(
+      (img) => img || null
+    );
 
     delete productObj.productImages;
 
@@ -574,10 +640,6 @@ export const getProductStats = async (req, res) => {
     console.error("Get product stats error:", error);
     res.status(500).json({ error: "Server error" });
   }
-};
-
-const generateImageHash = (buffer) => {
-  return crypto.createHash("md5").update(buffer).digest("hex");
 };
 
 async function fileToBuffer(file) {
@@ -731,7 +793,7 @@ export const updateProduct = async (req, res) => {
         try {
           const buffer = await fileToBuffer(file);
 
-            if (isValidBuffer(buffer)) {
+          if (isValidBuffer(buffer)) {
             const processed = await sharp(buffer)
               .webp({ lossless: true, effort: 4 })
               .toBuffer();
@@ -751,10 +813,12 @@ export const updateProduct = async (req, res) => {
                   finalImages.push(uploadResult.url);
                 }
               } catch (uploadErr) {
-                console.error('ImageKit upload error:', uploadErr);
+                console.error("ImageKit upload error:", uploadErr);
               }
             } else {
-              console.warn('ImageKit not configured; skipping product image upload');
+              console.warn(
+                "ImageKit not configured; skipping product image upload"
+              );
             }
           } else {
             console.warn(
@@ -792,8 +856,7 @@ export const updateProduct = async (req, res) => {
       imageUpdateSummary: {
         totalImages: finalImages.length,
         newImagesAdded: req.files?.length || 0,
-        existingImagesRetained:
-          finalImages.length - (req.files?.length || 0),
+        existingImagesRetained: finalImages.length - (req.files?.length || 0),
       },
     });
   } catch (error) {
