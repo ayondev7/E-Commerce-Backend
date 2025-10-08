@@ -7,7 +7,7 @@ import sharp from 'sharp';
 import ImageKit from 'imagekit';
 import SellerNotification from '../models/SellerNotification.js';
 import Product from '../models/Product.js';
-import Order from '../models/Order.js';
+import Order from '../models/Order.js'; 
 
 function getImageKitInstance() {
   const { IMAGEKIT_PUBLIC_KEY, IMAGEKIT_PRIVATE_KEY, IMAGEKIT_URL_ENDPOINT } =
